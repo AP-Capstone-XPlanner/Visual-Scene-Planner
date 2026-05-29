@@ -1,0 +1,45 @@
+const propCategories = {
+  "Living Room & Bedroom": [
+    "Sofa / Couch",
+    "Coffee table",
+    "Dining table and chairs",
+    "Bed frame and mattress",
+    "Wardrobe / Dresser",
+    "Bookshelf",
+    "Nightstand",
+  ],
+  "Appliances & Decor": [
+    "Refrigerator",
+    "Television",
+    "Kitchen Cabinets",
+    "Curtains / Blinds",
+    "Floor Lamp 1 (Wood)",
+    "Floor Lamp 2 (Metal)",
+  ],
+  "Backstage & Set Flats": [
+    "Stage Curtain",
+    "Stage couches or armchairs",
+    "Prop tables and chairs",
+    "Fake doors or window frames (flats)",
+    "Cube (Grey)",
+    "Cylinder (Grey)",
+    "Sphere (Grey)",
+    "Cone (Grey)",
+    "Pyramid (Grey)",
+    "Rectangular Prism (Grey)",
+    "Drama Chair 1 (Red)",
+    "Drama Chair 2 (Blue)",
+    "Drama Chair 3 (Green)",
+  ],
+  "Orchestra & Concert": [
+    "Musician chairs",
+    "Conductor's podium",
+    "Music stands",
+    "Drum set",
+    "Microphones",
+    "Harp",
+    "Piano",
+  ],
+}
+
+export default propCategories
