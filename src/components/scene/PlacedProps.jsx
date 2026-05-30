@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
-import { TransformControls, Line } from '@react-three/drei';
+import { TransformControls, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStageStore } from '../../store/stageStore.js';
 import { PropMesh } from '../props/PropMesh.jsx';
@@ -51,11 +51,24 @@ function PlacedPropItem({ prop, isSelected }) {
   const lastPathPoint = useRef(null);
 
   // --- Dancer animation state ---
-  const dancerTravelDuration = useStageStore((s) => s.dancerTravelDuration);
+  const dancerTravelTimes = useStageStore((s) => s.dancerTravelTimes);
+  const dancerTravelDuration = dancerTravelTimes[prop.id] ?? 5;
+  const playTriggeredIds = useStageStore((s) => s.playTriggeredIds);
+  const clearPlayTriggerFor = useStageStore((s) => s.clearPlayTriggerFor);
   const animating = useRef(false);
   const animProgress = useRef(0);
   const animPath = useRef(null);
   const animTotalLen = useRef(0);
+
+  // Respond to centralized play trigger
+  useEffect(() => {
+    if (!isDancer || !playTriggeredIds.includes(prop.id)) return;
+    startDancerAnimationRef.current?.();
+    clearPlayTriggerFor(prop.id);
+  }, [isDancer, playTriggeredIds, prop.id, clearPlayTriggerFor]);
+
+  // --- Dancer hover state ---
+  const [dancerHovered, setDancerHovered] = useState(false);
 
   // Interactive toggle actions
   const togglePropInteraction = useStageStore((s) => s.togglePropInteraction);
@@ -287,6 +300,9 @@ function PlacedPropItem({ prop, isSelected }) {
     animating.current = true;
   }, [dancerPath]);
 
+  const startDancerAnimationRef = useRef(startDancerAnimation);
+  startDancerAnimationRef.current = startDancerAnimation;
+
   useFrame((_, delta) => {
     if (!animating.current || !animPath.current) return;
     const speed = animTotalLen.current / Math.max(dancerTravelDuration, 0.1);
@@ -329,6 +345,8 @@ function PlacedPropItem({ prop, isSelected }) {
         visible={showInScene}
         onClick={isDancer ? handleDancerClick : handleClick}
         onPointerDown={isDancer ? handleDancerPointerDown : undefined}
+        onPointerOver={isDancer ? () => setDancerHovered(true) : undefined}
+        onPointerOut={isDancer ? () => setDancerHovered(false) : undefined}
       >
         <PropMesh
           type={prop.type}
@@ -342,6 +360,21 @@ function PlacedPropItem({ prop, isSelected }) {
         <PropTagLabel tag={prop.tag} />
         {isSelected && showInScene && <PropCoordinateLabel prop={prop} />}
       </group>
+      {isDancer && dancerHovered && prop.tag && (
+        <Html position={[prop.position[0], prop.position[1] + 1.9, prop.position[2]]} center>
+          <div style={{
+            background: 'rgba(0,0,0,0.75)',
+            color: '#fff',
+            padding: '2px 8px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+          }}>
+            {prop.tag}
+          </div>
+        </Html>
+      )}
       {isDancer && dancerPath.length > 1 && (
         <>
           <Line

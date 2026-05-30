@@ -38,7 +38,9 @@ export const useStageStore = create((set, get) => ({
   groundColor: DEFAULT_GROUND_COLOR,
   stageTexture: DEFAULT_STAGE_TEXTURE,
   curtainDuration: 3,
-  dancerTravelDuration: 5,
+  dancerTravelTimes: {},
+  dancerCount: 0,
+  playTriggeredIds: [],
   props: [],
   selectedPropId: null,
   positioningMode: false,
@@ -82,7 +84,21 @@ export const useStageStore = create((set, get) => ({
 
   setCurtainDuration: (duration) => set({ curtainDuration: duration }),
 
-  setDancerTravelDuration: (duration) => set({ dancerTravelDuration: duration }),
+  setDancerTravelTime: (id, duration) =>
+    set((s) => ({
+      dancerTravelTimes: { ...s.dancerTravelTimes, [id]: duration },
+    })),
+
+  getDancerTravelTime: (id) => {
+    return get().dancerTravelTimes[id] ?? 5;
+  },
+
+  triggerDancerPlay: (ids) => set({ playTriggeredIds: ids }),
+
+  clearPlayTriggerFor: (id) =>
+    set((s) => ({
+      playTriggeredIds: s.playTriggeredIds.filter((tid) => tid !== id),
+    })),
 
   setShowStageBaseline: (show) => set({ showStageBaseline: show }),
 
@@ -157,8 +173,17 @@ export const useStageStore = create((set, get) => ({
   addProp: (prop) =>
     set((s) => {
       const id = crypto.randomUUID();
+      const isDancer = prop.type === 'dancer';
+      const newDancerCount = isDancer ? s.dancerCount + 1 : s.dancerCount;
+      const tag = isDancer ? `Dancer ${newDancerCount}` : (prop.tag || '');
+      const newProp = { ...createNewProp({ ...prop, tag }), id };
+      const newTravelTimes = isDancer
+        ? { ...s.dancerTravelTimes, [id]: 5 }
+        : s.dancerTravelTimes;
       return {
-        props: [...s.props, { ...createNewProp(prop), id }],
+        props: [...s.props, newProp],
+        dancerCount: newDancerCount,
+        dancerTravelTimes: newTravelTimes,
         mode: 'select',
         placementType: null,
         placementDraft: null,
@@ -173,12 +198,16 @@ export const useStageStore = create((set, get) => ({
     })),
 
   removeProp: (id) =>
-    set((s) => ({
-      props: s.props.filter((p) => p.id !== id),
-      selectedPropId: s.selectedPropId === id ? null : s.selectedPropId,
-      positioningMode:
-        s.selectedPropId === id ? false : s.positioningMode,
-    })),
+    set((s) => {
+      const { [id]: _, ...restTravelTimes } = s.dancerTravelTimes;
+      return {
+        props: s.props.filter((p) => p.id !== id),
+        dancerTravelTimes: restTravelTimes,
+        selectedPropId: s.selectedPropId === id ? null : s.selectedPropId,
+        positioningMode:
+          s.selectedPropId === id ? false : s.positioningMode,
+      };
+    }),
 
   selectProp: (id) =>
     set((s) => {
