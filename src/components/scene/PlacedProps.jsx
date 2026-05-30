@@ -12,7 +12,6 @@ import { snapValue } from '../../utils/snap.js';
 import { PropCoordinateLabel } from './PropCoordinateLabel.jsx';
 import { PropTagLabel } from './PropTagLabel.jsx';
 import { BlueSelectionRing } from './SelectionRings.jsx';
-import { beautifyPath } from '../../utils/pathBeautify.js';
 
 export function PlacedProps() {
   const props = useStageStore((s) => s.props);
@@ -44,6 +43,9 @@ function PlacedPropItem({ prop, isSelected }) {
 
   // --- Dancer mouse-drag state ---
   const isDancer = prop.type === 'dancer';
+  const choreographyOpen = useStageStore((s) => s.choreographyOpen);
+  const choreographyOpenRef = useRef(choreographyOpen);
+  choreographyOpenRef.current = choreographyOpen;
   const dancerDragging = useRef(false);
   const propRef = useRef(prop);
   propRef.current = prop;
@@ -55,6 +57,7 @@ function PlacedPropItem({ prop, isSelected }) {
   const dancerTravelDuration = dancerTravelTimes[prop.id] ?? 5;
   const playTriggeredIds = useStageStore((s) => s.playTriggeredIds);
   const clearPlayTriggerFor = useStageStore((s) => s.clearPlayTriggerFor);
+  const isPaused = useStageStore((s) => s.isPaused);
   const animating = useRef(false);
   const animProgress = useRef(0);
   const animPath = useRef(null);
@@ -207,7 +210,8 @@ function PlacedPropItem({ prop, isSelected }) {
         );
         updateProp(prop.id, { position: newPosition });
 
-        // Collect path point (throttled by distance to avoid too many segments)
+        // Collect path point only when choreography mode is active
+        if (!choreographyOpenRef.current) return;
         const point = [newPosition[0], topY + 0.02, newPosition[2]];
         if (
           !lastPathPoint.current ||
@@ -227,12 +231,6 @@ function PlacedPropItem({ prop, isSelected }) {
       dancerDragging.current = false;
       setOrbitEnabled(true);
       gl.domElement.style.cursor = '';
-      // Beautify the path on release
-      setDancerPath((prev) => {
-        if (prev.length < 2) return prev;
-        const beautified = beautifyPath(prev);
-        return beautified.length >= 2 ? beautified : prev;
-      });
     };
 
     window.addEventListener('pointermove', onMove);
@@ -304,7 +302,7 @@ function PlacedPropItem({ prop, isSelected }) {
   startDancerAnimationRef.current = startDancerAnimation;
 
   useFrame((_, delta) => {
-    if (!animating.current || !animPath.current) return;
+    if (!animating.current || !animPath.current || isPaused) return;
     const speed = animTotalLen.current / Math.max(dancerTravelDuration, 0.1);
     animProgress.current += (speed * delta) / animTotalLen.current;
     if (animProgress.current >= 1) {
@@ -360,6 +358,26 @@ function PlacedPropItem({ prop, isSelected }) {
         <PropTagLabel tag={prop.tag} />
         {isSelected && showInScene && <PropCoordinateLabel prop={prop} />}
       </group>
+      {isDancer && isSelected && showInScene && (
+        <>
+          <Line
+            points={[[-halfX, topY + 0.01, prop.position[2]], [halfX, topY + 0.01, prop.position[2]]]}
+            color="#fbbf24"
+            lineWidth={0.5}
+            transparent
+            opacity={0.35}
+            depthTest
+          />
+          <Line
+            points={[[prop.position[0], topY + 0.01, -halfZ], [prop.position[0], topY + 0.01, halfZ]]}
+            color="#fbbf24"
+            lineWidth={0.5}
+            transparent
+            opacity={0.35}
+            depthTest
+          />
+        </>
+      )}
       {isDancer && dancerHovered && prop.tag && (
         <Html position={[prop.position[0], prop.position[1] + 1.9, prop.position[2]]} center>
           <div style={{
@@ -375,7 +393,7 @@ function PlacedPropItem({ prop, isSelected }) {
           </div>
         </Html>
       )}
-      {isDancer && dancerPath.length > 1 && (
+      {isDancer && choreographyOpen && dancerPath.length > 1 && (
         <>
           <Line
             points={dancerPath}
@@ -398,7 +416,7 @@ function PlacedPropItem({ prop, isSelected }) {
           />
         </>
       )}
-      {isDancer && dancerPath.length > 1 && !animating.current && (
+      {isDancer && choreographyOpen && dancerPath.length > 1 && !animating.current && (
         <mesh
           position={[dancerPath[0][0], dancerPath[0][1] + 0.15, dancerPath[0][2]]}
           onClick={(e) => { e.stopPropagation(); startDancerAnimation(); }}

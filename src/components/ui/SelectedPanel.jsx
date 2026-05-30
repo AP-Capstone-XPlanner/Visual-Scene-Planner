@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PROP_CATALOG, PROP_SCALE_LIMITS, PROP_TAG_MAX_LENGTH } from '../../constants/props.js';
 import { getPropCatalogSpec } from '../../constants/propCatalogSpecs.js';
 import { useStageStore } from '../../store/stageStore.js';
@@ -39,9 +40,60 @@ export function SelectedPanel() {
   const typeLabel =
     selectedProp && PROP_CATALOG.find((p) => p.type === selectedProp.type)?.label;
 
+  const isDancer = selectedProp?.type === 'dancer';
+
+  // --- Drag to move panel ---
+  const shellRef = useRef(null);
+  const dragging = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0, left: 0, bottom: 0 });
+
+  const onDragStart = useCallback((e) => {
+    if (!shellRef.current) return;
+    dragging.current = true;
+    const rect = shellRef.current.getBoundingClientRect();
+    dragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      left: parseInt(shellRef.current.style.left || 0) || 0,
+      bottom: parseInt(shellRef.current.style.bottom || 0) || 0,
+    };
+    shellRef.current.style.transition = 'none';
+    e.preventDefault();
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragging.current || !shellRef.current) return;
+      const dx = e.clientX - dragStart.current.x;
+      const dy = dragStart.current.y - e.clientY;
+      shellRef.current.style.left = `${dragStart.current.left + dx}px`;
+      shellRef.current.style.bottom = `${Math.max(0, dragStart.current.bottom + dy)}px`;
+    };
+    const onUp = () => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      if (shellRef.current) shellRef.current.style.transition = '';
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, []);
+
   return (
-    <div className={`selected-panel-shell ${open ? 'selected-panel-shell--open' : ''}`} aria-hidden={!open}>
+    <div
+      ref={shellRef}
+      className={`selected-panel-shell ${open ? 'selected-panel-shell--open' : ''} ${isDancer ? 'selected-panel--dancer' : ''}`}
+      aria-hidden={!open}
+    >
       <div className="selected-panel">
+        <div
+          className="selected-panel-drag-handle"
+          onPointerDown={onDragStart}
+          title="Drag to move panel"
+        />
         {selectedProp && (
           <>
             <div className="selected-panel-header">

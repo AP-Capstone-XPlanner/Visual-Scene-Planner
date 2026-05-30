@@ -1231,3 +1231,261 @@ input[type='range'] {
   padding: 0.25rem 0.5rem;
   font-size: 0.68rem;
 }
+
+/* ── Choreography toggle button (top-right) ────────────────────── */
+.choreography-toggle-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 20;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(15, 17, 23, 0.85);
+  color: #e4e4e7;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background 0.15s, border-color 0.15s;
+}
+.choreography-toggle-btn:hover {
+  background: rgba(30, 34, 45, 0.9);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Choreography timeline — full-width top bar ────────────────── */
+.choreography-timeline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 18;
+  background: rgba(15, 17, 23, 0.94);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 14px 6px;
+  color: #e4e4e7;
+  font-size: 0.74rem;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
+}
+
+.choreography-timeline-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.choreography-timeline-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.choreography-timeline-title {
+  font-weight: 700;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.choreography-inline-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: #a1a1aa;
+  white-space: nowrap;
+}
+
+.choreography-timeline-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+/* Timeline bar */
+.choreography-timeline-bar {
+  flex: 1;
+  min-width: 150px;
+  max-width: 500px;
+}
+.choreography-timeline-track {
+  position: relative;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+}
+.choreography-timeline-start,
+.choreography-timeline-end {
+  font-size: 0.6rem;
+  color: #52525b;
+  position: absolute;
+  bottom: -15px;
+}
+.choreography-timeline-start { left: 3px; }
+.choreography-timeline-end { right: 3px; }
+
+.choreography-timeline-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  z-index: 1;
+}
+.choreography-timeline-marker-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 2px solid #0f1117;
+  box-shadow: 0 0 5px rgba(245, 158, 11, 0.5);
+}
+
+/* Time inputs */
+.choreography-time-input {
+  width: 50px;
+  padding: 2px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e4e4e7;
+  font-size: 0.7rem;
+  text-align: center;
+}
+.choreography-time-input--sm { width: 42px; font-size: 0.68rem; padding: 1px 3px; }
+.choreography-time-input--xs { width: 38px; font-size: 0.65rem; padding: 1px 2px; }
+
+.choreography-music-duration {
+  font-size: 0.68rem;
+  color: #a1a1aa;
+  white-space: nowrap;
+}
+
+/* Formation list — inline row */
+.choreography-formations {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+  min-height: 22px;
+}
+.choreography-empty {
+  color: #52525b;
+  font-size: 0.68rem;
+}
+
+.choreography-formation-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.choreography-formation-name {
+  font-size: 0.7rem;
+  cursor: pointer;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.choreography-name-input {
+  width: 90px;
+  padding: 1px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e4e4e7;
+  font-size: 0.7rem;
+}
+.choreography-time-unit {
+  font-size: 0.6rem;
+  color: #52525b;
+}
+.choreography-btn--icon {
+  padding: 1px 5px !important;
+  font-size: 0.65rem !important;
+  line-height: 1.2;
+}
+
+/* ── Selected panel — dancer compact mode ──────────────────────── */
+.selected-panel--dancer .selected-panel {
+  padding: 6px 8px;
+}
+.selected-panel--dancer .selected-panel-header {
+  margin-bottom: 3px;
+}
+.selected-panel--dancer .selected-panel-title {
+  font-size: 0.78rem;
+}
+.selected-panel--dancer .selected-panel-tag input {
+  font-size: 0.68rem;
+  padding: 2px 4px;
+  max-width: 100px;
+}
+.selected-panel--dancer .selected-panel-meta {
+  font-size: 0.62rem;
+}
+.selected-panel--dancer .btn-compact {
+  padding: 2px 7px;
+  font-size: 0.65rem;
+}
+.selected-panel--dancer .selected-panel-section {
+  padding: 4px 0;
+}
+.selected-panel--dancer .selected-panel-section-title {
+  font-size: 0.62rem;
+  margin-bottom: 2px;
+}
+.selected-panel--dancer .selected-panel-position-row {
+  gap: 3px;
+}
+.selected-panel--dancer .position-rot {
+  font-size: 0.65rem;
+}
+.selected-panel--dancer .selected-panel-dims-badge {
+  font-size: 0.6rem;
+  padding: 1px 4px;
+}
+.selected-panel--dancer .selected-panel-size-row {
+  margin-top: 4px;
+}
+.selected-panel--dancer .selected-panel-footer-row {
+  margin-top: 4px;
+}
+.selected-panel--dancer .selected-panel {
+  max-width: 280px;
+}
+
+/* Drag handle for panel */
+.selected-panel-drag-handle {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 0 0 3px 3px;
+  cursor: grab;
+  z-index: 2;
+}
+.selected-panel-drag-handle:active {
+  cursor: grabbing;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Dancer guide lines on stage */
+.dancer-guide-line {
+  pointer-events: none;
+}

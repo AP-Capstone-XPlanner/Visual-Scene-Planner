@@ -41,6 +41,7 @@ export const useStageStore = create((set, get) => ({
   dancerTravelTimes: {},
   dancerCount: 0,
   playTriggeredIds: [],
+  isPaused: false,
   props: [],
   selectedPropId: null,
   positioningMode: false,
@@ -99,6 +100,9 @@ export const useStageStore = create((set, get) => ({
     set((s) => ({
       playTriggeredIds: s.playTriggeredIds.filter((tid) => tid !== id),
     })),
+
+  pausePlayback: () => set({ isPaused: true }),
+  resumePlayback: () => set({ isPaused: false }),
 
   setShowStageBaseline: (show) => set({ showStageBaseline: show }),
 
@@ -200,9 +204,12 @@ export const useStageStore = create((set, get) => ({
   removeProp: (id) =>
     set((s) => {
       const { [id]: _, ...restTravelTimes } = s.dancerTravelTimes;
+      const remaining = s.props.filter((p) => p.id !== id);
+      const remainingDancers = remaining.filter((p) => p.type === 'dancer').length;
       return {
-        props: s.props.filter((p) => p.id !== id),
+        props: remaining,
         dancerTravelTimes: restTravelTimes,
+        dancerCount: remainingDancers > 0 ? s.dancerCount : 0,
         selectedPropId: s.selectedPropId === id ? null : s.selectedPropId,
         positioningMode:
           s.selectedPropId === id ? false : s.positioningMode,
@@ -463,5 +470,90 @@ export const useStageStore = create((set, get) => ({
   toggleSnap: () => set((s) => ({ snapToGrid: !s.snapToGrid })),
 
   clearAllProps: () =>
-    set({ props: [], selectedPropId: null, positioningMode: false }),
+    set({ props: [], selectedPropId: null, positioningMode: false, dancerCount: 0, dancerTravelTimes: {} }),
+
+  // ── Choreography ──────────────────────────────────────────────
+  choreographyOpen: false,
+  formations: [],
+  formationCounter: 0,
+  timelineEndTime: 120, // seconds (default 2:00)
+  musicDuration: null,
+
+  toggleChoreography: () =>
+    set((s) => ({ choreographyOpen: !s.choreographyOpen })),
+
+  saveFormation: (time) =>
+    set((s) => {
+      const dancers = s.props.filter((p) => p.type === 'dancer');
+      if (dancers.length === 0) return s;
+      const newCount = s.formationCounter + 1;
+      const positions = {};
+      dancers.forEach((d) => {
+        positions[d.id] = [...d.position];
+      });
+      const formation = {
+        id: crypto.randomUUID(),
+        name: `Formation ${newCount}`,
+        time: Math.max(0, time ?? 0),
+        positions,
+      };
+      // Insert in time order
+      const formations = [...s.formations, formation].sort(
+        (a, b) => a.time - b.time,
+      );
+      return {
+        formations,
+        formationCounter: newCount,
+      };
+    }),
+
+  removeFormation: (id) =>
+    set((s) => ({
+      formations: s.formations.filter((f) => f.id !== id),
+    })),
+
+  updateFormationTime: (id, time) =>
+    set((s) => ({
+      formations: s.formations
+        .map((f) => (f.id === id ? { ...f, time: Math.max(0, time) } : f))
+        .sort((a, b) => a.time - b.time),
+    })),
+
+  updateFormationName: (id, name) =>
+    set((s) => ({
+      formations: s.formations.map((f) =>
+        f.id === id ? { ...f, name } : f,
+      ),
+    })),
+
+  setTimelineEndTime: (time) =>
+    set({ timelineEndTime: Math.max(1, time) }),
+
+  setMusicDuration: (duration) =>
+    set({
+      musicDuration: duration,
+      timelineEndTime: duration ? Math.max(1, Math.ceil(duration)) : 120,
+    }),
+
+  /** Apply formation: move all dancers to their saved positions for this formation. */
+  applyFormation: (formationId) => {
+    const { formations, props, updateProp } = get();
+    const formation = formations.find((f) => f.id === formationId);
+    if (!formation) return;
+    Object.entries(formation.positions).forEach(([dancerId, pos]) => {
+      const dancer = props.find((p) => p.id === dancerId);
+      if (dancer) {
+        updateProp(dancerId, { position: pos });
+      }
+    });
+  },
+
+  /** Set all dancers' travel times to match the time between two formations. */
+  setTravelTimeBetweenFormations: (fromTime, toTime) => {
+    const duration = Math.max(0.5, toTime - fromTime);
+    const { props, setDancerTravelTime } = get();
+    props
+      .filter((p) => p.type === 'dancer')
+      .forEach((d) => setDancerTravelTime(d.id, duration));
+  },
 }));
