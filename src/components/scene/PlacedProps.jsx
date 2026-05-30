@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
-import { TransformControls } from '@react-three/drei';
+import { TransformControls, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStageStore } from '../../store/stageStore.js';
 import { PropMesh } from '../props/PropMesh.jsx';
@@ -12,6 +12,7 @@ import { snapValue } from '../../utils/snap.js';
 import { PropCoordinateLabel } from './PropCoordinateLabel.jsx';
 import { PropTagLabel } from './PropTagLabel.jsx';
 import { BlueSelectionRing } from './SelectionRings.jsx';
+import { beautifyPath } from '../../utils/pathBeautify.js';
 
 export function PlacedProps() {
   const props = useStageStore((s) => s.props);
@@ -46,6 +47,8 @@ function PlacedPropItem({ prop, isSelected }) {
   const dancerDragging = useRef(false);
   const propRef = useRef(prop);
   propRef.current = prop;
+  const [dancerPath, setDancerPath] = useState([]);
+  const lastPathPoint = useRef(null);
 
   // Interactive toggle actions
   const togglePropInteraction = useStageStore((s) => s.togglePropInteraction);
@@ -183,6 +186,19 @@ function PlacedPropItem({ prop, isSelected }) {
           halfX, halfZ, false, topY, propRef.current,
         );
         updateProp(prop.id, { position: newPosition });
+
+        // Collect path point (throttled by distance to avoid too many segments)
+        const point = [newPosition[0], topY + 0.02, newPosition[2]];
+        if (
+          !lastPathPoint.current ||
+          Math.hypot(
+            point[0] - lastPathPoint.current[0],
+            point[2] - lastPathPoint.current[2],
+          ) > 0.1
+        ) {
+          lastPathPoint.current = point;
+          setDancerPath((prev) => [...prev, point]);
+        }
       }
     };
 
@@ -191,6 +207,12 @@ function PlacedPropItem({ prop, isSelected }) {
       dancerDragging.current = false;
       setOrbitEnabled(true);
       gl.domElement.style.cursor = '';
+      // Beautify the path on release
+      setDancerPath((prev) => {
+        if (prev.length < 2) return prev;
+        const beautified = beautifyPath(prev);
+        return beautified.length >= 2 ? beautified : prev;
+      });
     };
 
     window.addEventListener('pointermove', onMove);
@@ -211,17 +233,22 @@ function PlacedPropItem({ prop, isSelected }) {
       dancerDragging.current = true;
       setOrbitEnabled(false);
       gl.domElement.style.cursor = 'grabbing';
-      // Record offset so the dancer stays put on press
+      // Clear previous path and record offset so the dancer stays put on press
+      lastPathPoint.current = null;
       const pos = projectPointerToStage(e);
       if (pos) {
         const currentX = propRef.current.position[0];
         const currentZ = propRef.current.position[2];
         dancerDragOffset.current = { x: currentX - pos[0], z: currentZ - pos[1] };
+        // Reset path to just the starting point
+        const startPoint = [currentX, topY + 0.02, currentZ];
+        lastPathPoint.current = startPoint;
+        setDancerPath([startPoint]);
       } else {
         dancerDragOffset.current = { x: 0, z: 0 };
       }
     },
-    [isDancer, setOrbitEnabled, gl, projectPointerToStage],
+    [isDancer, setOrbitEnabled, gl, projectPointerToStage, topY],
   );
 
   const handleDancerClick = useCallback(
@@ -258,6 +285,29 @@ function PlacedPropItem({ prop, isSelected }) {
         <PropTagLabel tag={prop.tag} />
         {isSelected && showInScene && <PropCoordinateLabel prop={prop} />}
       </group>
+      {isDancer && dancerPath.length > 1 && (
+        <>
+          <Line
+            points={dancerPath}
+            color="#ef4444"
+            lineWidth={6}
+            transparent
+            opacity={0.8}
+            depthTest
+          />
+          <Line
+            points={[dancerPath[0], dancerPath[dancerPath.length - 1]]}
+            color="#fca5a5"
+            lineWidth={1}
+            dashed
+            dashSize={0.3}
+            gapSize={0.2}
+            transparent
+            opacity={0.5}
+            depthTest
+          />
+        </>
+      )}
       {showPositioning && (
         <group position={prop.position} rotation={[0, prop.rotation, 0]}>
           <BlueSelectionRing
