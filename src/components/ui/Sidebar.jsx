@@ -21,6 +21,8 @@ export function Sidebar() {
   const setGroundColor = useStageStore((s) => s.setGroundColor);
   const setStageTexture = useStageStore((s) => s.setStageTexture);
   const setCurtainDuration = useStageStore((s) => s.setCurtainDuration);
+  const dancerTravelDuration = useStageStore((s) => s.dancerTravelDuration);
+  const setDancerTravelDuration = useStageStore((s) => s.setDancerTravelDuration);
   const showStageBaseline = useStageStore((s) => s.showStageBaseline);
   const showStageAreaGrid = useStageStore((s) => s.showStageAreaGrid);
   const showStageZones = useStageStore((s) => s.showStageZones);
@@ -172,6 +174,9 @@ export function Sidebar() {
             </div>
           </div>
         ))}
+        <DimensionControl label="Travel time" value={dancerTravelDuration}
+          min={0.5} max={30} step={0.5} inputStep={0.1} unit="s"
+          onChange={setDancerTravelDuration} />
         {mode === 'place' && (
           <button type="button" className="btn secondary" onClick={cancelPlacement}>Cancel</button>
         )}

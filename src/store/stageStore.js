@@ -38,6 +38,7 @@ export const useStageStore = create((set, get) => ({
   groundColor: DEFAULT_GROUND_COLOR,
   stageTexture: DEFAULT_STAGE_TEXTURE,
   curtainDuration: 3,
+  dancerTravelDuration: 5,
   props: [],
   selectedPropId: null,
   positioningMode: false,
@@ -80,6 +81,8 @@ export const useStageStore = create((set, get) => ({
   setStageTexture: (texture) => set({ stageTexture: texture }),
 
   setCurtainDuration: (duration) => set({ curtainDuration: duration }),
+
+  setDancerTravelDuration: (duration) => set({ dancerTravelDuration: duration }),
 
   setShowStageBaseline: (show) => set({ showStageBaseline: show }),
 

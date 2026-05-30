@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useThree } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber';
 import { TransformControls, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStageStore } from '../../store/stageStore.js';
@@ -49,6 +49,13 @@ function PlacedPropItem({ prop, isSelected }) {
   propRef.current = prop;
   const [dancerPath, setDancerPath] = useState([]);
   const lastPathPoint = useRef(null);
+
+  // --- Dancer animation state ---
+  const dancerTravelDuration = useStageStore((s) => s.dancerTravelDuration);
+  const animating = useRef(false);
+  const animProgress = useRef(0);
+  const animPath = useRef(null);
+  const animTotalLen = useRef(0);
 
   // Interactive toggle actions
   const togglePropInteraction = useStageStore((s) => s.togglePropInteraction);
@@ -262,6 +269,56 @@ function PlacedPropItem({ prop, isSelected }) {
     [isDancer, handleClick],
   );
 
+  // --- Dancer play animation ---
+  const startDancerAnimation = useCallback(() => {
+    if (dancerPath.length < 2) return;
+    // Calculate total path length
+    let totalLen = 0;
+    for (let i = 1; i < dancerPath.length; i++) {
+      totalLen += Math.hypot(
+        dancerPath[i][0] - dancerPath[i - 1][0],
+        dancerPath[i][2] - dancerPath[i - 1][2],
+      );
+    }
+    if (totalLen < 0.001) return;
+    animTotalLen.current = totalLen;
+    animPath.current = dancerPath;
+    animProgress.current = 0;
+    animating.current = true;
+  }, [dancerPath]);
+
+  useFrame((_, delta) => {
+    if (!animating.current || !animPath.current) return;
+    const speed = animTotalLen.current / Math.max(dancerTravelDuration, 0.1);
+    animProgress.current += (speed * delta) / animTotalLen.current;
+    if (animProgress.current >= 1) {
+      animProgress.current = 1;
+      animating.current = false;
+    }
+    // Interpolate position along path
+    const path = animPath.current;
+    const targetDist = animProgress.current * animTotalLen.current;
+    let traveled = 0;
+    for (let i = 1; i < path.length; i++) {
+      const segLen = Math.hypot(
+        path[i][0] - path[i - 1][0],
+        path[i][2] - path[i - 1][2],
+      );
+      if (traveled + segLen >= targetDist || i === path.length - 1) {
+        const t = segLen > 0 ? (targetDist - traveled) / segLen : 0;
+        const tc = Math.max(0, Math.min(1, t));
+        const x = path[i - 1][0] + (path[i][0] - path[i - 1][0]) * tc;
+        const z = path[i - 1][2] + (path[i][2] - path[i - 1][2]) * tc;
+        const newPosition = normalizePropPosition(
+          x, topY, z, halfX, halfZ, false, topY, propRef.current,
+        );
+        updateProp(prop.id, { position: newPosition });
+        break;
+      }
+      traveled += segLen;
+    }
+  });
+
   return (
     <>
       <group
@@ -307,6 +364,18 @@ function PlacedPropItem({ prop, isSelected }) {
             depthTest
           />
         </>
+      )}
+      {isDancer && dancerPath.length > 1 && !animating.current && (
+        <mesh
+          position={[dancerPath[0][0], dancerPath[0][1] + 0.15, dancerPath[0][2]]}
+          onClick={(e) => { e.stopPropagation(); startDancerAnimation(); }}
+          onPointerOver={() => { gl.domElement.style.cursor = 'pointer'; }}
+          onPointerOut={() => { if (!dancerDragging.current) gl.domElement.style.cursor = ''; }}
+          renderOrder={20}
+        >
+          <sphereGeometry args={[0.15, 16, 16]} />
+          <meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.4} />
+        </mesh>
       )}
       {showPositioning && (
         <group position={prop.position} rotation={[0, prop.rotation, 0]}>
