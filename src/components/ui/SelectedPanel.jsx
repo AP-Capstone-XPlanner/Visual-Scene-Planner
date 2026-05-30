@@ -28,7 +28,14 @@ export function SelectedPanel() {
 
   const selectedProp = props.find((p) => p.id === selectedPropId);
   const open = Boolean(selectedProp);
-  const dims = selectedProp ? getPropCatalogSpec(selectedProp.type) : null;
+  const baseDims = selectedProp ? getPropCatalogSpec(selectedProp.type) : null;
+  const displayDims = baseDims && selectedProp
+    ? {
+        width: (baseDims.width * selectedProp.scale).toFixed(2),
+        height: (baseDims.height * selectedProp.scale).toFixed(2),
+        depth: (baseDims.depth * selectedProp.scale).toFixed(2),
+      }
+    : null;
   const typeLabel =
     selectedProp && PROP_CATALOG.find((p) => p.type === selectedProp.type)?.label;
 
@@ -50,9 +57,9 @@ export function SelectedPanel() {
                 </div>
                 <div className="selected-panel-meta">
                   {typeLabel && <p className="selected-panel-subtitle">{typeLabel}</p>}
-                  {dims && (
+                  {displayDims && (
                     <span className="selected-panel-dims-badge">
-                      {dims.width}×{dims.height}×{dims.depth} m
+                      {displayDims.width}×{displayDims.height}×{displayDims.depth} m
                     </span>
                   )}
                 </div>

@@ -49,7 +49,8 @@ import MusicianChair from '../orchestra/MusicianChair.jsx';
 export function PropCatalogModel({ type, interactionState, onToggleDiningChair, onTogglePropTableChair }) {
   const stage = useStageStore((s) => s.stage);
   const curtainDuration = useStageStore((s) => s.curtainDuration);
-  const stageBounds = { width: stage.width, height: stage.height };
+  const stageEnclosureHeight = useStageStore((s) => s.stageEnclosureHeight);
+  const stageBounds = { width: stage.width, height: stageEnclosureHeight };
   switch (type) {
     // V2 catalog models
     case 'sofa':

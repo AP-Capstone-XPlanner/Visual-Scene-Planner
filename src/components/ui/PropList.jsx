@@ -12,32 +12,29 @@ export function PropList() {
   if (props.length === 0) return null;
 
   return (
-    <section className="panel">
+    <section className="panel panel--hierarchy">
       <div className="panel-title-row">
         <h2>On stage</h2>
       </div>
-      <ul className="prop-list">
+      <ul className="prop-list prop-list--unity">
         {props.map((prop) => {
           const label = PROP_CATALOG.find((p) => p.type === prop.type)?.label ?? prop.type;
           const isSelected = prop.id === selectedPropId;
           return (
-            <li key={prop.id} className={`prop-list-item ${isSelected ? 'selected' : ''}`}>
-              <span className="prop-list-swatch" style={{ background: prop.color }} aria-hidden />
-              <button type="button" className="prop-list-select" onClick={() => selectProp(prop.id)}>
-                <span className="prop-list-name">{prop.tag.trim() || label}</span>
-                <span className="prop-list-meta">
-                  {prop.tag.trim() ? label : ''}
-                  {prop.tag.trim() ? ' · ' : ''}
-                  {prop.visible ? 'Visible' : 'Hidden'} · {(prop.scale * 100).toFixed(0)}%
-                </span>
-              </button>
-              <button type="button" className="prop-list-visibility"
+            <li key={prop.id} className={`prop-list-item prop-list-item--unity ${isSelected ? 'selected' : ''}`}>
+              <button
+                type="button"
+                className="prop-list-visibility prop-list-visibility--unity"
                 title={prop.visible ? 'Hide prop' : 'Show prop'}
                 aria-label={prop.visible ? 'Hide prop' : 'Show prop'}
-                onClick={(e) => { e.stopPropagation(); togglePropVisibility(prop.id); }}>
+                onClick={(e) => { e.stopPropagation(); togglePropVisibility(prop.id); }}
+              >
                 {prop.visible ? '👁' : '👁‍🗨'}
               </button>
-              <button type="button" className="prop-list-delete" title="Delete prop"
+              <button type="button" className="prop-list-select prop-list-select--unity" onClick={() => selectProp(prop.id)}>
+                <span className="prop-list-name prop-list-name--unity">{prop.tag.trim() || label}</span>
+              </button>
+              <button type="button" className="prop-list-delete prop-list-delete--unity" title="Delete prop"
                 aria-label="Delete prop"
                 onClick={(e) => { e.stopPropagation(); removeProp(prop.id); }}>
                 ✕
@@ -46,7 +43,7 @@ export function PropList() {
           );
         })}
       </ul>
-      <button type="button" className="btn secondary prop-list-clear" onClick={clearAllProps}>
+      <button type="button" className="btn secondary prop-list-clear prop-list-clear--unity" onClick={clearAllProps}>
         Clear all props
       </button>
     </section>
