@@ -83,3 +83,13 @@ export const PROP_CATALOG_CATEGORIES = Object.freeze([
 
 /** Flat list for lookups (selected panel, etc.). */
 export const PROP_CATALOG = PROP_CATALOG_CATEGORIES.flatMap((c) => c.items);
+
+export const CHOREOGRAPHY_CATEGORIES = Object.freeze([
+  {
+    id: 'formation',
+    label: 'Formation',
+    items: [
+      { type: 'dancer', label: getPropLabel('dancer'), description: 'Dancer (light blue cylinder)', icon: '🩰' },
+    ],
+  },
+]);

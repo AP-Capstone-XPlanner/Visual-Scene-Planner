@@ -44,7 +44,7 @@ import Harp from '../orchestra/Harp.jsx';
 import MusicStand from '../orchestra/MusicStand.jsx';
 import ConductorsPodium from '../orchestra/ConductorsPodium.jsx';
 import Microphones from '../orchestra/Microphones.jsx';
-import MusicianChair from '../orchestra/MusicianChair.jsx';
+import Dancer from '../shapes/Dancer.jsx';
 
 export function PropCatalogModel({ type, interactionState, onToggleDiningChair, onTogglePropTableChair }) {
   const stage = useStageStore((s) => s.stage);
@@ -134,6 +134,9 @@ export function PropCatalogModel({ type, interactionState, onToggleDiningChair, 
       return <Harp />;
     case 'piano':
       return <Piano />;
+
+    case 'dancer':
+      return <Dancer />;
 
     default:
       return null;

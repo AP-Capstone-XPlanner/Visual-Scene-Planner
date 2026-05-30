@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PROP_CATALOG_CATEGORIES } from '../../constants/props.js';
+import { PROP_CATALOG_CATEGORIES, CHOREOGRAPHY_CATEGORIES } from '../../constants/props.js';
 import { STAGE_ENCLOSURE_HEIGHT_LIMITS } from '../../constants/stage.js';
 import { STAGE_LIMITS } from '../../constants/props.js';
 import { useStageStore } from '../../store/stageStore.js';
@@ -133,6 +133,31 @@ export function Sidebar() {
           <p className="placement-banner">Click stage to place · Esc cancel</p>
         )}
         {PROP_CATALOG_CATEGORIES.map((category) => (
+          <div key={category.id} className="prop-category">
+            <h3 className="prop-category-title">{category.label}</h3>
+            <div className="prop-grid">
+              {category.items.map((item) => (
+                <button key={item.type} type="button"
+                  className={`prop-card ${placementType === item.type ? 'active' : ''}`}
+                  onClick={() => handlePropCardClick(item.type)} title={item.label}>
+                  <span className="prop-icon">{item.icon}</span>
+                  <span className="prop-label">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        {mode === 'place' && (
+          <button type="button" className="btn secondary" onClick={cancelPlacement}>Cancel</button>
+        )}
+      </section>
+
+      <section className="panel">
+        <h2>Choreography</h2>
+        {mode === 'place' && (
+          <p className="placement-banner">Click stage to place · Esc cancel</p>
+        )}
+        {CHOREOGRAPHY_CATEGORIES.map((category) => (
           <div key={category.id} className="prop-category">
             <h3 className="prop-category-title">{category.label}</h3>
             <div className="prop-grid">

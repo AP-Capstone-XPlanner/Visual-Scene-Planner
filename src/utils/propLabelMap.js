@@ -36,6 +36,7 @@ const LABEL_MAP = Object.freeze({
   microphones: 'Microphones',
   harp: 'Harp',
   piano: 'Piano',
+  dancer: 'Dancer',
 });
 
 export function getPropLabel(type) {

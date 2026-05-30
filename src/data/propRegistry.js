@@ -34,6 +34,7 @@ import Sphere from '../components/props/shapes/Sphere.jsx'
 import Cone from '../components/props/shapes/Cone.jsx'
 import Pyramid from '../components/props/shapes/Pyramid.jsx'
 import RectangularPrism from '../components/props/shapes/RectangularPrism.jsx'
+import Dancer from '../components/props/shapes/Dancer.jsx'
 
 export const PROP_REGISTRY = {
   "Sofa / Couch":                               { component: Sofa, dims: [1.83, 0.79, 1.52] },
@@ -69,6 +70,7 @@ export const PROP_REGISTRY = {
   "Microphones":                                { component: Microphones, dims: [0.4, 1.7, 0.4] },
   "Harp":                                       { component: Harp, dims: [0.42, 1.52, 0.72] },
   "Piano":                                      { component: Piano, dims: [1.47, 1.5, 1.55] },
+  "Dancer":                                     { component: Dancer, dims: [0.5, 1.7, 0.5] },
 }
 
 export function getPropDims(type, bounds = { width: 15, height: 6, length: 10 }) {

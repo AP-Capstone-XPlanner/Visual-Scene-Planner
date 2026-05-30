@@ -35,6 +35,9 @@ export const PROP_CATALOG_SPECS = Object.freeze({
   drama_chair_blue: { width: 0.5, height: 0.83, depth: 0.52 },
   drama_chair_green: { width: 0.42, height: 0.92, depth: 0.49 },
 
+  // Choreography
+  dancer: { width: 0.5, height: 1.7, depth: 0.5 },
+
   // Orchestra & concert
   musician_chair: { width: 0.43, height: 0.97, depth: 0.43 },
   conductor_podium: { width: 1.0, height: 1.2, depth: 1.0 },
