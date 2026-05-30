@@ -8,6 +8,7 @@ import { useStageBounds, useStageTopY } from './StagePlatform.jsx';
 import { propSupportsToggleInteraction } from '../../constants/propCatalogSpecs.js';
 import { getPropSelectionRingRadii } from '../../utils/propBounds.js';
 import { normalizePropPosition, normalizeRotation } from '../../utils/propPosition.js';
+import { snapValue } from '../../utils/snap.js';
 import { PropCoordinateLabel } from './PropCoordinateLabel.jsx';
 import { PropTagLabel } from './PropTagLabel.jsx';
 import { BlueSelectionRing } from './SelectionRings.jsx';
@@ -36,8 +37,15 @@ function PlacedPropItem({ prop, isSelected }) {
   const topY = useStageTopY();
   const { halfX, halfZ } = useStageBounds();
   const orbitControls = useThree((s) => s.controls);
+  const { camera, raycaster, gl } = useThree();
   const ringDragging = useRef(false);
   const [ringDragActive, setRingDragActive] = useState(false);
+
+  // --- Dancer mouse-drag state ---
+  const isDancer = prop.type === 'dancer';
+  const dancerDragging = useRef(false);
+  const propRef = useRef(prop);
+  propRef.current = prop;
 
   // Interactive toggle actions
   const togglePropInteraction = useStageStore((s) => s.togglePropInteraction);
@@ -139,6 +147,94 @@ function PlacedPropItem({ prop, isSelected }) {
     useStageStore.getState().selectProp(prop.id);
   };
 
+  // --- Dancer mouse-drag: project pointer onto stage XZ plane ---
+  const projectPointerToStage = useCallback(
+    (event) => {
+      const rect = gl.domElement.getBoundingClientRect();
+      const px = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      const py = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(new THREE.Vector2(px, py), camera);
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -topY);
+      const target = new THREE.Vector3();
+      if (raycaster.ray.intersectPlane(plane, target)) {
+        const x = THREE.MathUtils.clamp(target.x, -halfX + 0.25, halfX - 0.25);
+        const z = THREE.MathUtils.clamp(target.z, -halfZ + 0.25, halfZ - 0.25);
+        return [x, z];
+      }
+      return null;
+    },
+    [gl, camera, raycaster, topY, halfX, halfZ],
+  );
+
+  // --- Dancer press-drag-release: press to drag, release to fix ---
+  const dancerDragOffset = useRef({ x: 0, z: 0 });
+
+  useEffect(() => {
+    if (!isDancer) return;
+
+    const onMove = (event) => {
+      if (!dancerDragging.current) return;
+      const pos = projectPointerToStage(event);
+      if (pos) {
+        const newPosition = normalizePropPosition(
+          pos[0] + dancerDragOffset.current.x,
+          topY,
+          pos[1] + dancerDragOffset.current.z,
+          halfX, halfZ, false, topY, propRef.current,
+        );
+        updateProp(prop.id, { position: newPosition });
+      }
+    };
+
+    const onUp = () => {
+      if (!dancerDragging.current) return;
+      dancerDragging.current = false;
+      setOrbitEnabled(true);
+      gl.domElement.style.cursor = '';
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      dancerDragging.current = false;
+      setOrbitEnabled(true);
+      gl.domElement.style.cursor = '';
+    };
+  }, [isDancer, projectPointerToStage, updateProp, prop.id, topY, halfX, halfZ, setOrbitEnabled, gl]);
+
+  const handleDancerPointerDown = useCallback(
+    (e) => {
+      if (!isDancer) return;
+      e.stopPropagation();
+      dancerDragging.current = true;
+      setOrbitEnabled(false);
+      gl.domElement.style.cursor = 'grabbing';
+      // Record offset so the dancer stays put on press
+      const pos = projectPointerToStage(e);
+      if (pos) {
+        const currentX = propRef.current.position[0];
+        const currentZ = propRef.current.position[2];
+        dancerDragOffset.current = { x: currentX - pos[0], z: currentZ - pos[1] };
+      } else {
+        dancerDragOffset.current = { x: 0, z: 0 };
+      }
+    },
+    [isDancer, setOrbitEnabled, gl, projectPointerToStage],
+  );
+
+  const handleDancerClick = useCallback(
+    (e) => {
+      if (!isDancer) return;
+      // If we were dragging, suppress the click
+      if (dancerDragging.current) return;
+      e.stopPropagation();
+      handleClick(e);
+    },
+    [isDancer, handleClick],
+  );
+
   return (
     <>
       <group
@@ -147,7 +243,8 @@ function PlacedPropItem({ prop, isSelected }) {
         rotation={[0, prop.rotation, 0]}
         scale={[prop.scale, prop.scale, prop.scale]}
         visible={showInScene}
-        onClick={handleClick}
+        onClick={isDancer ? handleDancerClick : handleClick}
+        onPointerDown={isDancer ? handleDancerPointerDown : undefined}
       >
         <PropMesh
           type={prop.type}
