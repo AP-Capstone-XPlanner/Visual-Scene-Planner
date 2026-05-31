@@ -8,7 +8,6 @@ import { useStageBounds, useStageTopY } from './StagePlatform.jsx';
 import { propSupportsToggleInteraction } from '../../constants/propCatalogSpecs.js';
 import { getPropSelectionRingRadii } from '../../utils/propBounds.js';
 import { normalizePropPosition, normalizeRotation } from '../../utils/propPosition.js';
-import { snapValue } from '../../utils/snap.js';
 import { PropCoordinateLabel } from './PropCoordinateLabel.jsx';
 import { PropTagLabel } from './PropTagLabel.jsx';
 import { BlueSelectionRing } from './SelectionRings.jsx';
@@ -40,38 +39,6 @@ function PlacedPropItem({ prop, isSelected }) {
   const { camera, raycaster, gl } = useThree();
   const ringDragging = useRef(false);
   const [ringDragActive, setRingDragActive] = useState(false);
-
-  // --- Dancer mouse-drag state ---
-  const isDancer = prop.type === 'dancer';
-  const choreographyOpen = useStageStore((s) => s.choreographyOpen);
-  const choreographyOpenRef = useRef(choreographyOpen);
-  choreographyOpenRef.current = choreographyOpen;
-  const dancerDragging = useRef(false);
-  const propRef = useRef(prop);
-  propRef.current = prop;
-  const [dancerPath, setDancerPath] = useState([]);
-  const lastPathPoint = useRef(null);
-
-  // --- Dancer animation state ---
-  const dancerTravelTimes = useStageStore((s) => s.dancerTravelTimes);
-  const dancerTravelDuration = dancerTravelTimes[prop.id] ?? 5;
-  const playTriggeredIds = useStageStore((s) => s.playTriggeredIds);
-  const clearPlayTriggerFor = useStageStore((s) => s.clearPlayTriggerFor);
-  const isPaused = useStageStore((s) => s.isPaused);
-  const animating = useRef(false);
-  const animProgress = useRef(0);
-  const animPath = useRef(null);
-  const animTotalLen = useRef(0);
-
-  // Respond to centralized play trigger
-  useEffect(() => {
-    if (!isDancer || !playTriggeredIds.includes(prop.id)) return;
-    startDancerAnimationRef.current?.();
-    clearPlayTriggerFor(prop.id);
-  }, [isDancer, playTriggeredIds, prop.id, clearPlayTriggerFor]);
-
-  // --- Dancer hover state ---
-  const [dancerHovered, setDancerHovered] = useState(false);
 
   // Interactive toggle actions
   const togglePropInteraction = useStageStore((s) => s.togglePropInteraction);
@@ -173,7 +140,104 @@ function PlacedPropItem({ prop, isSelected }) {
     useStageStore.getState().selectProp(prop.id);
   };
 
-  // --- Dancer mouse-drag: project pointer onto stage XZ plane ---
+  // --- Dancer mouse-drag (basic, no paths) ---
+  const isDancer = prop.type === 'dancer';
+  const choreographyOpen = useStageStore((s) => s.choreographyOpen);
+  const choreographyOpenRef = useRef(choreographyOpen);
+  choreographyOpenRef.current = choreographyOpen;
+  const savedPaths = useStageStore((s) => s.savedPaths);
+  const savedPathsRef = useRef([]);
+  savedPathsRef.current = savedPaths;
+  const savePath = useStageStore((s) => s.savePath);
+  const dancerTravelTimes = useStageStore((s) => s.dancerTravelTimes);
+  const formations = useStageStore((s) => s.formations);
+  const selectedFormationId = useStageStore((s) => s.selectedFormationId);
+  const hiddenPathIds = useStageStore((s) => s.hiddenPathIds);
+  const dancerDragging = useRef(false);
+  const propRef = useRef(prop);
+  propRef.current = prop;
+  const dancerDragOffset = useRef({ x: 0, z: 0 });
+  const dragStartPos = useRef(null);
+  const [dancerPath, setDancerPath] = useState([]);
+  const dancerPathRef = useRef([]);
+  dancerPathRef.current = dancerPath;
+  const lastPathPoint = useRef(null);
+  const [dancerHovered, setDancerHovered] = useState(false);
+  const DRAG_THRESHOLD = 3;
+
+  // Clear local path when choreography closes
+  useEffect(() => {
+    if (!choreographyOpen) { setDancerPath([]); lastPathPoint.current = null; }
+  }, [choreographyOpen]);
+
+  // Determine which saved paths to render
+  const visiblePaths = useMemo(() => {
+    if (!isDancer) return [];
+    const sorted = [...savedPaths].filter((p) => p.dancerId === prop.id).sort((a, b) => a.startTime - b.startTime);
+    if (sorted.length === 0) return [];
+    const visible = sorted.filter((p) => !hiddenPathIds.includes(p.id));
+    if (visible.length === 0) return [];
+    const sortedF = [...formations].sort((a, b) => a.time - b.time);
+    const selIdx = sortedF.findIndex((f) => f.id === selectedFormationId);
+    if (selIdx < 0) return visible.slice(0, 1);
+    const fromTime = sortedF[selIdx].time;
+    const toTime = selIdx < sortedF.length - 1 ? sortedF[selIdx + 1].time : 99999;
+    return visible.filter((p) => p.startTime >= fromTime - 0.5 && p.startTime < toTime);
+  }, [isDancer, savedPaths, prop.id, formations, selectedFormationId, hiddenPathIds]);
+
+  // --- Animation ---
+  const playTriggeredIds = useStageStore((s) => s.playTriggeredIds);
+  const clearPlayTriggerFor = useStageStore((s) => s.clearPlayTriggerFor);
+  const isPaused = useStageStore((s) => s.isPaused);
+  const animating = useRef(false);
+  const animSegments = useRef([]);
+  const animSegmentIdx = useRef(0);
+
+  const startDancerAnimation = useCallback(() => {
+    const dancerPaths = savedPaths.filter((p) => p.dancerId === prop.id).sort((a, b) => a.startTime - b.startTime);
+    if (dancerPaths.length === 0) return;
+    animSegments.current = dancerPaths.map((path) => ({ path, progress: 0 }));
+    animSegmentIdx.current = 0;
+    animating.current = true;
+  }, [savedPaths, prop.id]);
+
+  const startDancerAnimationRef = useRef(startDancerAnimation);
+  startDancerAnimationRef.current = startDancerAnimation;
+
+  // Respond to play trigger
+  useEffect(() => {
+    if (!isDancer || !playTriggeredIds.includes(prop.id)) return;
+    startDancerAnimationRef.current();
+    clearPlayTriggerFor(prop.id);
+  }, [isDancer, playTriggeredIds, prop.id, clearPlayTriggerFor]);
+
+  useFrame((_, delta) => {
+    if (!animating.current || isPaused) return;
+    const segments = animSegments.current;
+    const idx = animSegmentIdx.current;
+    if (idx >= segments.length) { animating.current = false; return; }
+    const seg = segments[idx];
+    seg.progress += delta / seg.path.duration;
+    if (seg.progress >= 1) { seg.progress = 1; animSegmentIdx.current = idx + 1; }
+    const pts = seg.path.points;
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][2] - pts[i - 1][2]);
+    const dist = seg.progress * total;
+    let traveled = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const sl = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][2] - pts[i - 1][2]);
+      if (traveled + sl >= dist || i === pts.length - 1) {
+        const t = sl > 0 ? (dist - traveled) / sl : 0;
+        const tc = Math.max(0, Math.min(1, t));
+        const x = pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * tc;
+        const z = pts[i - 1][2] + (pts[i][2] - pts[i - 1][2]) * tc;
+        updateProp(prop.id, { position: normalizePropPosition(x, topY, z, halfX, halfZ, false, topY, propRef.current) });
+        break;
+      }
+      traveled += sl;
+    }
+  });
+
   const projectPointerToStage = useCallback(
     (event) => {
       const rect = gl.domElement.getBoundingClientRect();
@@ -192,13 +256,41 @@ function PlacedPropItem({ prop, isSelected }) {
     [gl, camera, raycaster, topY, halfX, halfZ],
   );
 
-  // --- Dancer press-drag-release: press to drag, release to fix ---
-  const dancerDragOffset = useRef({ x: 0, z: 0 });
+  const handleDancerPointerDown = useCallback(
+    (e) => {
+      if (!isDancer) return;
+      useStageStore.getState().selectProp(prop.id);
+      dragStartPos.current = { x: e.clientX, y: e.clientY };
+      dancerDragging.current = false;
+      const pos = projectPointerToStage(e);
+      if (pos) {
+        dancerDragOffset.current = {
+          x: propRef.current.position[0] - pos[0],
+          z: propRef.current.position[2] - pos[1],
+        };
+      } else {
+        dancerDragOffset.current = { x: 0, z: 0 };
+      }
+    },
+    [isDancer, projectPointerToStage],
+  );
 
   useEffect(() => {
     if (!isDancer) return;
 
     const onMove = (event) => {
+      if (!dancerDragging.current && dragStartPos.current) {
+        const dx = event.clientX - dragStartPos.current.x;
+        const dy = event.clientY - dragStartPos.current.y;
+        if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+        dancerDragging.current = true;
+        setOrbitEnabled(false);
+        gl.domElement.style.cursor = 'grabbing';
+        // Start path recording
+        const startPt = [propRef.current.position[0], topY + 0.02, propRef.current.position[2]];
+        lastPathPoint.current = startPt;
+        setDancerPath([startPt]);
+      }
       if (!dancerDragging.current) return;
       const pos = projectPointerToStage(event);
       if (pos) {
@@ -210,16 +302,10 @@ function PlacedPropItem({ prop, isSelected }) {
         );
         updateProp(prop.id, { position: newPosition });
 
-        // Collect path point only when choreography mode is active
+        // Collect path point when choreography mode is active
         if (!choreographyOpenRef.current) return;
         const point = [newPosition[0], topY + 0.02, newPosition[2]];
-        if (
-          !lastPathPoint.current ||
-          Math.hypot(
-            point[0] - lastPathPoint.current[0],
-            point[2] - lastPathPoint.current[2],
-          ) > 0.1
-        ) {
+        if (!lastPathPoint.current || Math.hypot(point[0] - lastPathPoint.current[0], point[2] - lastPathPoint.current[2]) > 0.1) {
           lastPathPoint.current = point;
           setDancerPath((prev) => [...prev, point]);
         }
@@ -227,8 +313,14 @@ function PlacedPropItem({ prop, isSelected }) {
     };
 
     const onUp = () => {
-      if (!dancerDragging.current) return;
+      if (dancerDragging.current && choreographyOpenRef.current && dancerPathRef.current.length > 1) {
+        const dur = dancerTravelTimes[prop.id] ?? 5;
+        const myPaths = savedPathsRef.current.filter((p) => p.dancerId === prop.id);
+        const lastEnd = myPaths.length > 0 ? Math.max(...myPaths.map((p) => p.startTime + p.duration)) : 0;
+        savePath(prop.id, dancerPathRef.current, lastEnd, dur);
+      }
       dancerDragging.current = false;
+      dragStartPos.current = null;
       setOrbitEnabled(true);
       gl.domElement.style.cursor = '';
     };
@@ -239,99 +331,11 @@ function PlacedPropItem({ prop, isSelected }) {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       dancerDragging.current = false;
+      dragStartPos.current = null;
       setOrbitEnabled(true);
       gl.domElement.style.cursor = '';
     };
   }, [isDancer, projectPointerToStage, updateProp, prop.id, topY, halfX, halfZ, setOrbitEnabled, gl]);
-
-  const handleDancerPointerDown = useCallback(
-    (e) => {
-      if (!isDancer) return;
-      e.stopPropagation();
-      dancerDragging.current = true;
-      setOrbitEnabled(false);
-      gl.domElement.style.cursor = 'grabbing';
-      // Clear previous path and record offset so the dancer stays put on press
-      lastPathPoint.current = null;
-      const pos = projectPointerToStage(e);
-      if (pos) {
-        const currentX = propRef.current.position[0];
-        const currentZ = propRef.current.position[2];
-        dancerDragOffset.current = { x: currentX - pos[0], z: currentZ - pos[1] };
-        // Reset path to just the starting point
-        const startPoint = [currentX, topY + 0.02, currentZ];
-        lastPathPoint.current = startPoint;
-        setDancerPath([startPoint]);
-      } else {
-        dancerDragOffset.current = { x: 0, z: 0 };
-      }
-    },
-    [isDancer, setOrbitEnabled, gl, projectPointerToStage, topY],
-  );
-
-  const handleDancerClick = useCallback(
-    (e) => {
-      if (!isDancer) return;
-      // If we were dragging, suppress the click
-      if (dancerDragging.current) return;
-      e.stopPropagation();
-      handleClick(e);
-    },
-    [isDancer, handleClick],
-  );
-
-  // --- Dancer play animation ---
-  const startDancerAnimation = useCallback(() => {
-    if (dancerPath.length < 2) return;
-    // Calculate total path length
-    let totalLen = 0;
-    for (let i = 1; i < dancerPath.length; i++) {
-      totalLen += Math.hypot(
-        dancerPath[i][0] - dancerPath[i - 1][0],
-        dancerPath[i][2] - dancerPath[i - 1][2],
-      );
-    }
-    if (totalLen < 0.001) return;
-    animTotalLen.current = totalLen;
-    animPath.current = dancerPath;
-    animProgress.current = 0;
-    animating.current = true;
-  }, [dancerPath]);
-
-  const startDancerAnimationRef = useRef(startDancerAnimation);
-  startDancerAnimationRef.current = startDancerAnimation;
-
-  useFrame((_, delta) => {
-    if (!animating.current || !animPath.current || isPaused) return;
-    const speed = animTotalLen.current / Math.max(dancerTravelDuration, 0.1);
-    animProgress.current += (speed * delta) / animTotalLen.current;
-    if (animProgress.current >= 1) {
-      animProgress.current = 1;
-      animating.current = false;
-    }
-    // Interpolate position along path
-    const path = animPath.current;
-    const targetDist = animProgress.current * animTotalLen.current;
-    let traveled = 0;
-    for (let i = 1; i < path.length; i++) {
-      const segLen = Math.hypot(
-        path[i][0] - path[i - 1][0],
-        path[i][2] - path[i - 1][2],
-      );
-      if (traveled + segLen >= targetDist || i === path.length - 1) {
-        const t = segLen > 0 ? (targetDist - traveled) / segLen : 0;
-        const tc = Math.max(0, Math.min(1, t));
-        const x = path[i - 1][0] + (path[i][0] - path[i - 1][0]) * tc;
-        const z = path[i - 1][2] + (path[i][2] - path[i - 1][2]) * tc;
-        const newPosition = normalizePropPosition(
-          x, topY, z, halfX, halfZ, false, topY, propRef.current,
-        );
-        updateProp(prop.id, { position: newPosition });
-        break;
-      }
-      traveled += segLen;
-    }
-  });
 
   return (
     <>
@@ -341,7 +345,7 @@ function PlacedPropItem({ prop, isSelected }) {
         rotation={[0, prop.rotation, 0]}
         scale={[prop.scale, prop.scale, prop.scale]}
         visible={showInScene}
-        onClick={isDancer ? handleDancerClick : handleClick}
+        onClick={handleClick}
         onPointerDown={isDancer ? handleDancerPointerDown : undefined}
         onPointerOver={isDancer ? () => setDancerHovered(true) : undefined}
         onPointerOut={isDancer ? () => setDancerHovered(false) : undefined}
@@ -358,70 +362,45 @@ function PlacedPropItem({ prop, isSelected }) {
         <PropTagLabel tag={prop.tag} />
         {isSelected && showInScene && <PropCoordinateLabel prop={prop} />}
       </group>
-      {isDancer && isSelected && showInScene && (
-        <>
-          <Line
-            points={[[-halfX, topY + 0.01, prop.position[2]], [halfX, topY + 0.01, prop.position[2]]]}
-            color="#fbbf24"
-            lineWidth={0.5}
-            transparent
-            opacity={0.35}
-            depthTest
-          />
-          <Line
-            points={[[prop.position[0], topY + 0.01, -halfZ], [prop.position[0], topY + 0.01, halfZ]]}
-            color="#fbbf24"
-            lineWidth={0.5}
-            transparent
-            opacity={0.35}
-            depthTest
-          />
-        </>
-      )}
       {isDancer && dancerHovered && prop.tag && (
         <Html position={[prop.position[0], prop.position[1] + 1.9, prop.position[2]]} center>
-          <div style={{
-            background: 'rgba(0,0,0,0.75)',
-            color: '#fff',
-            padding: '2px 8px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            whiteSpace: 'nowrap',
-            pointerEvents: 'none',
-          }}>
+          <div style={{ background: 'rgba(0,0,0,0.75)', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
             {prop.tag}
           </div>
         </Html>
       )}
-      {isDancer && choreographyOpen && dancerPath.length > 1 && (
+      {isDancer && isSelected && showInScene && (
         <>
-          <Line
-            points={dancerPath}
-            color="#ef4444"
-            lineWidth={6}
-            transparent
-            opacity={0.8}
-            depthTest
-          />
-          <Line
-            points={[dancerPath[0], dancerPath[dancerPath.length - 1]]}
-            color="#fca5a5"
-            lineWidth={1}
-            dashed
-            dashSize={0.3}
-            gapSize={0.2}
-            transparent
-            opacity={0.5}
-            depthTest
-          />
+          <Line points={[[-halfX, topY + 0.01, prop.position[2]], [halfX, topY + 0.01, prop.position[2]]]}
+            color="#fbbf24" lineWidth={0.5} transparent opacity={0.35} depthTest />
+          <Line points={[[prop.position[0], topY + 0.01, -halfZ], [prop.position[0], topY + 0.01, halfZ]]}
+            color="#fbbf24" lineWidth={0.5} transparent opacity={0.35} depthTest />
         </>
       )}
-      {isDancer && choreographyOpen && dancerPath.length > 1 && !animating.current && (
+      {isDancer && choreographyOpen && visiblePaths.map((vpath) => (
+        <Line key={vpath.id}
+          points={vpath.points}
+          color="#ef4444"
+          lineWidth={6}
+          transparent
+          opacity={0.8}
+          depthTest
+        />
+      ))}
+      {isDancer && choreographyOpen && dancerPath.length > 1 && (
+        <Line
+          points={dancerPath}
+          color="#ef4444"
+          lineWidth={6}
+          transparent
+          opacity={0.8}
+          depthTest
+        />
+      )}
+      {isDancer && choreographyOpen && visiblePaths.length > 0 && !animating.current && (
         <mesh
-          position={[dancerPath[0][0], dancerPath[0][1] + 0.15, dancerPath[0][2]]}
+          position={[visiblePaths[0].points[0][0], visiblePaths[0].points[0][1] + 0.15, visiblePaths[0].points[0][2]]}
           onClick={(e) => { e.stopPropagation(); startDancerAnimation(); }}
-          onPointerOver={() => { gl.domElement.style.cursor = 'pointer'; }}
-          onPointerOut={() => { if (!dancerDragging.current) gl.domElement.style.cursor = ''; }}
           renderOrder={20}
         >
           <sphereGeometry args={[0.15, 16, 16]} />

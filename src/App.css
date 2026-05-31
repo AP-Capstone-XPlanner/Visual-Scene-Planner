@@ -1349,6 +1349,18 @@ input[type='range'] {
   box-shadow: 0 0 5px rgba(245, 158, 11, 0.5);
 }
 
+/* Path segment bands on timeline */
+.choreography-timeline-path-segment {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  background: rgba(239, 68, 68, 0.3);
+  border-radius: 3px;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* Time inputs */
 .choreography-time-input {
   width: 50px;

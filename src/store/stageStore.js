@@ -177,22 +177,23 @@ export const useStageStore = create((set, get) => ({
   addProp: (prop) =>
     set((s) => {
       const id = crypto.randomUUID();
+      const base = createNewProp(prop);
       const isDancer = prop.type === 'dancer';
-      const newDancerCount = isDancer ? s.dancerCount + 1 : s.dancerCount;
-      const tag = isDancer ? `Dancer ${newDancerCount}` : (prop.tag || '');
-      const newProp = { ...createNewProp({ ...prop, tag }), id };
-      const newTravelTimes = isDancer
-        ? { ...s.dancerTravelTimes, [id]: 5 }
-        : s.dancerTravelTimes;
+      if (isDancer) {
+        const newCount = s.dancerCount + 1;
+        base.tag = `Dancer ${newCount}`;
+        return {
+          props: [...s.props, { ...base, id }],
+          dancerCount: newCount,
+          dancerTravelTimes: { ...s.dancerTravelTimes, [id]: 5 },
+          mode: 'select', placementType: null, placementDraft: null,
+          selectedPropId: id, positioningMode: false,
+        };
+      }
       return {
-        props: [...s.props, newProp],
-        dancerCount: newDancerCount,
-        dancerTravelTimes: newTravelTimes,
-        mode: 'select',
-        placementType: null,
-        placementDraft: null,
-        selectedPropId: id,
-        positioningMode: false,
+        props: [...s.props, { ...base, id }],
+        mode: 'select', placementType: null, placementDraft: null,
+        selectedPropId: id, positioningMode: false,
       };
     }),
 
@@ -476,11 +477,89 @@ export const useStageStore = create((set, get) => ({
   choreographyOpen: false,
   formations: [],
   formationCounter: 0,
+  savedPaths: [],
+  pathCounter: 0,
+  selectedFormationId: null,
+  hiddenPathIds: [],
   timelineEndTime: 120, // seconds (default 2:00)
   musicDuration: null,
 
   toggleChoreography: () =>
-    set((s) => ({ choreographyOpen: !s.choreographyOpen })),
+    set((s) => {
+      if (s.choreographyOpen) {
+        // Closing — clear all choreography data
+        return {
+          choreographyOpen: false,
+          savedPaths: [],
+          formations: [],
+          hiddenPathIds: [],
+          formationCounter: 0,
+          pathCounter: 0,
+          selectedFormationId: null,
+        };
+      }
+      return { choreographyOpen: true };
+    }),
+
+  savePath: (dancerId, points, startTime, duration) =>
+    set((s) => {
+      const newCount = s.pathCounter + 1;
+      const path = {
+        id: crypto.randomUUID(),
+        dancerId,
+        name: `Path ${newCount}`,
+        points: points.map((p) => [...p]),
+        startTime: Math.max(0, startTime ?? 0),
+        duration: Math.max(0.5, duration ?? 5),
+      };
+      const savedPaths = [...s.savedPaths, path].sort(
+        (a, b) => a.startTime - b.startTime,
+      );
+      return { savedPaths, pathCounter: newCount };
+    }),
+
+  updatePathTime: (pathId, startTime) =>
+    set((s) => ({
+      savedPaths: s.savedPaths
+        .map((p) => (p.id === pathId ? { ...p, startTime: Math.max(0, startTime) } : p))
+        .sort((a, b) => a.startTime - b.startTime),
+    })),
+
+  updatePathDuration: (pathId, duration) =>
+    set((s) => ({
+      savedPaths: s.savedPaths.map((p) =>
+        p.id === pathId ? { ...p, duration: Math.max(0.5, duration) } : p,
+      ),
+    })),
+
+  updatePathName: (pathId, name) =>
+    set((s) => ({
+      savedPaths: s.savedPaths.map((p) =>
+        p.id === pathId ? { ...p, name } : p,
+      ),
+    })),
+
+  removePath: (id) =>
+    set((s) => ({
+      savedPaths: s.savedPaths.filter((p) => p.id !== id),
+    })),
+
+  setSelectedFormationId: (id) => set({ selectedFormationId: id }),
+
+  togglePathVisibility: (pathId) =>
+    set((s) => ({
+      hiddenPathIds: s.hiddenPathIds.includes(pathId)
+        ? s.hiddenPathIds.filter((id) => id !== pathId)
+        : [...s.hiddenPathIds, pathId],
+    })),
+
+  toggleAllPathsVisibility: () =>
+    set((s) => {
+      if (s.hiddenPathIds.length === s.savedPaths.length && s.savedPaths.length > 0) {
+        return { hiddenPathIds: [] };
+      }
+      return { hiddenPathIds: s.savedPaths.map((p) => p.id) };
+    }),
 
   saveFormation: (time) =>
     set((s) => {
