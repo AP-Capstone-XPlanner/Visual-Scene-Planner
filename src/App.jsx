@@ -4,6 +4,7 @@ import { Sidebar } from './components/ui/Sidebar.jsx';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
 import { handleGlobalKeyDown } from './utils/globalKeyboard.js';
 import { SelectedPanel } from './components/ui/SelectedPanel.jsx';
+import { ChoreographyTimeline } from './components/ui/ChoreographyTimeline.jsx';
 import './App.css';
 
 function App() {
@@ -47,6 +48,7 @@ function App() {
       >
         <Scene3D />
         <div className="viewport-badge">Stage</div>
+        <ChoreographyTimeline />
         <SelectedPanel />
       </main>
     </div>

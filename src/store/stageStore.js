@@ -38,6 +38,11 @@ export const useStageStore = create((set, get) => ({
   groundColor: DEFAULT_GROUND_COLOR,
   stageTexture: DEFAULT_STAGE_TEXTURE,
   curtainDuration: 3,
+  dancerTravelTimes: {},
+  dancerCount: 0,
+  playTriggeredIds: [],
+  isPaused: false,
+  playbackTime: 0,
   props: [],
   selectedPropId: null,
   positioningMode: false,
@@ -80,6 +85,27 @@ export const useStageStore = create((set, get) => ({
   setStageTexture: (texture) => set({ stageTexture: texture }),
 
   setCurtainDuration: (duration) => set({ curtainDuration: duration }),
+
+  setDancerTravelTime: (id, duration) =>
+    set((s) => ({
+      dancerTravelTimes: { ...s.dancerTravelTimes, [id]: duration },
+    })),
+
+  getDancerTravelTime: (id) => {
+    return get().dancerTravelTimes[id] ?? 5;
+  },
+
+  triggerDancerPlay: (ids) => set({ playTriggeredIds: ids }),
+
+  clearPlayTriggerFor: (id) =>
+    set((s) => ({
+      playTriggeredIds: s.playTriggeredIds.filter((tid) => tid !== id),
+    })),
+
+  pausePlayback: () => set({ isPaused: true }),
+  resumePlayback: () => set({ isPaused: false }),
+
+  setPlaybackTime: (time) => set({ playbackTime: time }),
 
   setShowStageBaseline: (show) => set({ showStageBaseline: show }),
 
@@ -154,13 +180,23 @@ export const useStageStore = create((set, get) => ({
   addProp: (prop) =>
     set((s) => {
       const id = crypto.randomUUID();
+      const base = createNewProp(prop);
+      const isDancer = prop.type === 'dancer';
+      if (isDancer) {
+        const newCount = s.dancerCount + 1;
+        base.tag = `Dancer ${newCount}`;
+        return {
+          props: [...s.props, { ...base, id }],
+          dancerCount: newCount,
+          dancerTravelTimes: { ...s.dancerTravelTimes, [id]: 5 },
+          mode: 'select', placementType: null, placementDraft: null,
+          selectedPropId: id, positioningMode: false,
+        };
+      }
       return {
-        props: [...s.props, { ...createNewProp(prop), id }],
-        mode: 'select',
-        placementType: null,
-        placementDraft: null,
-        selectedPropId: id,
-        positioningMode: false,
+        props: [...s.props, { ...base, id }],
+        mode: 'select', placementType: null, placementDraft: null,
+        selectedPropId: id, positioningMode: false,
       };
     }),
 
@@ -170,12 +206,19 @@ export const useStageStore = create((set, get) => ({
     })),
 
   removeProp: (id) =>
-    set((s) => ({
-      props: s.props.filter((p) => p.id !== id),
-      selectedPropId: s.selectedPropId === id ? null : s.selectedPropId,
-      positioningMode:
-        s.selectedPropId === id ? false : s.positioningMode,
-    })),
+    set((s) => {
+      const { [id]: _, ...restTravelTimes } = s.dancerTravelTimes;
+      const remaining = s.props.filter((p) => p.id !== id);
+      const remainingDancers = remaining.filter((p) => p.type === 'dancer').length;
+      return {
+        props: remaining,
+        dancerTravelTimes: restTravelTimes,
+        dancerCount: remainingDancers > 0 ? s.dancerCount : 0,
+        selectedPropId: s.selectedPropId === id ? null : s.selectedPropId,
+        positioningMode:
+          s.selectedPropId === id ? false : s.positioningMode,
+      };
+    }),
 
   selectProp: (id) =>
     set((s) => {
@@ -431,5 +474,212 @@ export const useStageStore = create((set, get) => ({
   toggleSnap: () => set((s) => ({ snapToGrid: !s.snapToGrid })),
 
   clearAllProps: () =>
-    set({ props: [], selectedPropId: null, positioningMode: false }),
+    set({ props: [], selectedPropId: null, positioningMode: false, dancerCount: 0, dancerTravelTimes: {} }),
+
+  // ── Choreography ──────────────────────────────────────────────
+  choreographyOpen: false,
+  formations: [],
+  formationCounter: 0,
+  savedPaths: [],
+  pathCounter: 0,
+  stationaryMarkers: [],
+  stationaryCounter: 0,
+  selectedFormationId: null,
+  hiddenPathIds: [],
+  timelineEndTime: 120, // seconds (default 2:00)
+  musicDuration: null,
+
+  toggleChoreography: () =>
+    set((s) => {
+      if (s.choreographyOpen) {
+        // Closing — clear all choreography data
+        return {
+          choreographyOpen: false,
+          savedPaths: [],
+          formations: [],
+          hiddenPathIds: [],
+          stationaryMarkers: [],
+          formationCounter: 0,
+          pathCounter: 0,
+          stationaryCounter: 0,
+          selectedFormationId: null,
+        };
+      }
+      return { choreographyOpen: true };
+    }),
+
+  savePath: (dancerId, points, startTime, duration) =>
+    set((s) => {
+      const newCount = s.pathCounter + 1;
+      const path = {
+        id: crypto.randomUUID(),
+        dancerId,
+        name: `Path ${newCount}`,
+        points: points.map((p) => [...p]),
+        startTime: Math.max(0, startTime ?? 0),
+        duration: Math.max(0.5, duration ?? 5),
+        endTime: Math.max(0.5, (startTime ?? 0) + Math.max(0.5, duration ?? 5)),
+      };
+      const savedPaths = [...s.savedPaths, path].sort(
+        (a, b) => a.startTime - b.startTime,
+      );
+      return { savedPaths, pathCounter: newCount };
+    }),
+
+  updatePathTime: (pathId, startTime) =>
+    set((s) => ({
+      savedPaths: s.savedPaths
+        .map((p) => (p.id === pathId ? { ...p, startTime: Math.max(0, startTime) } : p))
+        .sort((a, b) => a.startTime - b.startTime),
+    })),
+
+  updatePathDuration: (pathId, duration) =>
+    set((s) => ({
+      savedPaths: s.savedPaths.map((p) =>
+        p.id === pathId ? { ...p, duration: Math.max(0.5, duration) } : p,
+      ),
+    })),
+
+  updatePathName: (pathId, name) =>
+    set((s) => ({
+      savedPaths: s.savedPaths.map((p) =>
+        p.id === pathId ? { ...p, name } : p,
+      ),
+    })),
+
+  removePath: (id) =>
+    set((s) => ({
+      savedPaths: s.savedPaths.filter((p) => p.id !== id),
+    })),
+
+  addStationary: (time, duration) =>
+    set((s) => {
+      const newCount = s.stationaryCounter + 1;
+      const marker = {
+        id: crypto.randomUUID(),
+        name: `Hold ${newCount}`,
+        time: Math.max(0, time ?? 0),
+        duration: Math.max(0.5, duration ?? 5),
+      };
+      const markers = [...s.stationaryMarkers, marker].sort((a, b) => a.time - b.time);
+      return { stationaryMarkers: markers, stationaryCounter: newCount };
+    }),
+
+  updateStationaryTime: (id, time) =>
+    set((s) => ({
+      stationaryMarkers: s.stationaryMarkers
+        .map((m) => (m.id === id ? { ...m, time: Math.max(0, time) } : m))
+        .sort((a, b) => a.time - b.time),
+    })),
+
+  updateStationaryDuration: (id, duration) =>
+    set((s) => ({
+      stationaryMarkers: s.stationaryMarkers.map((m) =>
+        m.id === id ? { ...m, duration: Math.max(0.5, duration) } : m,
+      ),
+    })),
+
+  updateStationaryName: (id, name) =>
+    set((s) => ({
+      stationaryMarkers: s.stationaryMarkers.map((m) =>
+        m.id === id ? { ...m, name } : m,
+      ),
+    })),
+
+  removeStationary: (id) =>
+    set((s) => ({
+      stationaryMarkers: s.stationaryMarkers.filter((m) => m.id !== id),
+    })),
+
+  setSelectedFormationId: (id) => set({ selectedFormationId: id }),
+
+  togglePathVisibility: (pathId) =>
+    set((s) => ({
+      hiddenPathIds: s.hiddenPathIds.includes(pathId)
+        ? s.hiddenPathIds.filter((id) => id !== pathId)
+        : [...s.hiddenPathIds, pathId],
+    })),
+
+  toggleAllPathsVisibility: () =>
+    set((s) => {
+      if (s.hiddenPathIds.length === s.savedPaths.length && s.savedPaths.length > 0) {
+        return { hiddenPathIds: [] };
+      }
+      return { hiddenPathIds: s.savedPaths.map((p) => p.id) };
+    }),
+
+  saveFormation: (startTime, endTime) =>
+    set((s) => {
+      const dancers = s.props.filter((p) => p.type === 'dancer');
+      if (dancers.length === 0) return s;
+      const newCount = s.formationCounter + 1;
+      const positions = {};
+      dancers.forEach((d) => { positions[d.id] = [...d.position]; });
+      const formation = {
+        id: crypto.randomUUID(),
+        name: `Formation ${newCount}`,
+        time: Math.max(0, startTime ?? 0),
+        endTime: Math.max(startTime + 0.5, endTime ?? startTime + 5),
+        positions,
+      };
+      const formations = [...s.formations, formation].sort((a, b) => a.time - b.time);
+      return { formations, formationCounter: newCount };
+    }),
+
+  removeFormation: (id) =>
+    set((s) => ({
+      formations: s.formations.filter((f) => f.id !== id),
+    })),
+
+  updateFormationTime: (id, time) =>
+    set((s) => ({
+      formations: s.formations
+        .map((f) => (f.id === id ? { ...f, time: Math.max(0, time) } : f))
+        .sort((a, b) => a.time - b.time),
+    })),
+
+  updateFormationName: (id, name) =>
+    set((s) => ({
+      formations: s.formations.map((f) =>
+        f.id === id ? { ...f, name } : f,
+      ),
+    })),
+
+  updateFormationEndTime: (id, endTime) =>
+    set((s) => ({
+      formations: s.formations.map((f) =>
+        f.id === id ? { ...f, endTime: Math.max(f.time + 0.5, endTime) } : f,
+      ),
+    })),
+
+  setTimelineEndTime: (time) =>
+    set({ timelineEndTime: Math.max(1, time) }),
+
+  setMusicDuration: (duration) =>
+    set({
+      musicDuration: duration,
+      timelineEndTime: duration ? Math.max(1, Math.ceil(duration)) : 120,
+    }),
+
+  /** Apply formation: move all dancers to their saved positions for this formation. */
+  applyFormation: (formationId) => {
+    const { formations, props, updateProp } = get();
+    const formation = formations.find((f) => f.id === formationId);
+    if (!formation) return;
+    Object.entries(formation.positions).forEach(([dancerId, pos]) => {
+      const dancer = props.find((p) => p.id === dancerId);
+      if (dancer) {
+        updateProp(dancerId, { position: pos });
+      }
+    });
+  },
+
+  /** Set all dancers' travel times to match the time between two formations. */
+  setTravelTimeBetweenFormations: (fromTime, toTime) => {
+    const duration = Math.max(0.5, toTime - fromTime);
+    const { props, setDancerTravelTime } = get();
+    props
+      .filter((p) => p.type === 'dancer')
+      .forEach((d) => setDancerTravelTime(d.id, duration));
+  },
 }));

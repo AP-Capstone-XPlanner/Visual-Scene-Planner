@@ -36,6 +36,7 @@ export const DEFAULT_PROP_COLORS = Object.freeze({
   microphones: '#333333',
   harp: '#deb941',
   piano: '#1a1a1a',
+  dancer: '#87CEEB',
 });
 
 export const COLOR_PRESETS = Object.freeze([

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PROP_CATALOG_CATEGORIES } from '../../constants/props.js';
+import { PROP_CATALOG_CATEGORIES, CHOREOGRAPHY_CATEGORIES } from '../../constants/props.js';
 import { STAGE_ENCLOSURE_HEIGHT_LIMITS } from '../../constants/stage.js';
 import { STAGE_LIMITS } from '../../constants/props.js';
 import { useStageStore } from '../../store/stageStore.js';
@@ -21,6 +21,7 @@ export function Sidebar() {
   const setGroundColor = useStageStore((s) => s.setGroundColor);
   const setStageTexture = useStageStore((s) => s.setStageTexture);
   const setCurtainDuration = useStageStore((s) => s.setCurtainDuration);
+  const triggerDancerPlay = useStageStore((s) => s.triggerDancerPlay);
   const showStageBaseline = useStageStore((s) => s.showStageBaseline);
   const showStageAreaGrid = useStageStore((s) => s.showStageAreaGrid);
   const showStageZones = useStageStore((s) => s.showStageZones);
@@ -40,6 +41,30 @@ export function Sidebar() {
   const toggleSnap = useStageStore((s) => s.toggleSnap);
   const hiddenCount = props.filter((p) => !p.visible).length;
   const [stagePanelOpen, setStagePanelOpen] = useState(true);
+
+  // Dancer playback selection
+  const dancerProps = props.filter((p) => p.type === 'dancer');
+  const [selectedDancerIds, setSelectedDancerIds] = useState([]);
+  const allSelected = dancerProps.length > 0 && selectedDancerIds.length === dancerProps.length;
+
+  const toggleDancerSelect = (id) => {
+    setSelectedDancerIds((prev) =>
+      prev.includes(id) ? prev.filter((tid) => tid !== id) : [...prev, id],
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedDancerIds([]);
+    } else {
+      setSelectedDancerIds(dancerProps.map((d) => d.id));
+    }
+  };
+
+  const handlePlaySelected = () => {
+    if (selectedDancerIds.length === 0) return;
+    triggerDancerPlay(selectedDancerIds);
+  };
 
   const handlePropCardClick = (type) => {
     if (placementType === type && mode === 'place') {
@@ -147,6 +172,57 @@ export function Sidebar() {
             </div>
           </div>
         ))}
+        {mode === 'place' && (
+          <button type="button" className="btn secondary" onClick={cancelPlacement}>Cancel</button>
+        )}
+      </section>
+
+      <section className="panel">
+        <h2>Choreography</h2>
+        {mode === 'place' && (
+          <p className="placement-banner">Click stage to place · Esc cancel</p>
+        )}
+        {CHOREOGRAPHY_CATEGORIES.map((category) => (
+          <div key={category.id} className="prop-category">
+            <h3 className="prop-category-title">{category.label}</h3>
+            <div className="prop-grid">
+              {category.items.map((item) => (
+                <button key={item.type} type="button"
+                  className={`prop-card ${placementType === item.type ? 'active' : ''}`}
+                  onClick={() => handlePropCardClick(item.type)} title={item.label}>
+                  <span className="prop-icon">{item.icon}</span>
+                  <span className="prop-label">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        {dancerProps.length > 0 && (
+          <div className="prop-category">
+            <h3 className="prop-category-title">Playback</h3>
+            <label className="toggle stage-toggle" style={{ marginBottom: 4 }}>
+              <input type="checkbox" checked={allSelected}
+                onChange={toggleSelectAll} />
+              Select All
+            </label>
+            {dancerProps.map((dancer) => (
+              <div key={dancer.id} style={{ marginBottom: 4 }}>
+                <label className="toggle stage-toggle" style={{ margin: 0 }}>
+                  <input type="checkbox"
+                    checked={selectedDancerIds.includes(dancer.id)}
+                    onChange={() => toggleDancerSelect(dancer.id)} />
+                  {dancer.tag || 'Dancer'}
+                </label>
+              </div>
+            ))}
+            <button type="button" className="btn primary"
+              style={{ marginTop: 6, width: '100%' }}
+              disabled={selectedDancerIds.length === 0}
+              onClick={handlePlaySelected}>
+              ▶ Play Selected
+            </button>
+          </div>
+        )}
         {mode === 'place' && (
           <button type="button" className="btn secondary" onClick={cancelPlacement}>Cancel</button>
         )}
