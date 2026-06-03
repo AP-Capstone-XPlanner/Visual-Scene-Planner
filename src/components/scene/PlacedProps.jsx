@@ -150,7 +150,9 @@ function PlacedPropItem({ prop, isSelected }) {
   savedPathsRef.current = savedPaths;
   const savePath = useStageStore((s) => s.savePath);
   const dancerTravelTimes = useStageStore((s) => s.dancerTravelTimes);
+  const stageTexture = useStageStore((s) => s.stageTexture);
   const formations = useStageStore((s) => s.formations);
+  const stationaryMarkers = useStageStore((s) => s.stationaryMarkers);
   const selectedFormationId = useStageStore((s) => s.selectedFormationId);
   const hiddenPathIds = useStageStore((s) => s.hiddenPathIds);
   const dancerDragging = useRef(false);
@@ -162,6 +164,9 @@ function PlacedPropItem({ prop, isSelected }) {
   const dancerPathRef = useRef([]);
   dancerPathRef.current = dancerPath;
   const lastPathPoint = useRef(null);
+  const preDragPosition = useRef(null);
+  const lastMoveTime = useRef(0);
+  const pathStraightened = useRef(false);
   const [dancerHovered, setDancerHovered] = useState(false);
   const DRAG_THRESHOLD = 3;
 
@@ -173,17 +178,8 @@ function PlacedPropItem({ prop, isSelected }) {
   // Determine which saved paths to render
   const visiblePaths = useMemo(() => {
     if (!isDancer) return [];
-    const sorted = [...savedPaths].filter((p) => p.dancerId === prop.id).sort((a, b) => a.startTime - b.startTime);
-    if (sorted.length === 0) return [];
-    const visible = sorted.filter((p) => !hiddenPathIds.includes(p.id));
-    if (visible.length === 0) return [];
-    const sortedF = [...formations].sort((a, b) => a.time - b.time);
-    const selIdx = sortedF.findIndex((f) => f.id === selectedFormationId);
-    if (selIdx < 0) return visible.slice(0, 1);
-    const fromTime = sortedF[selIdx].time;
-    const toTime = selIdx < sortedF.length - 1 ? sortedF[selIdx + 1].time : 99999;
-    return visible.filter((p) => p.startTime >= fromTime - 0.5 && p.startTime < toTime);
-  }, [isDancer, savedPaths, prop.id, formations, selectedFormationId, hiddenPathIds]);
+    return [...savedPaths].filter((p) => p.dancerId === prop.id).sort((a, b) => a.startTime - b.startTime);
+  }, [isDancer, savedPaths, prop.id]);
 
   // --- Animation ---
   const playTriggeredIds = useStageStore((s) => s.playTriggeredIds);
@@ -194,12 +190,36 @@ function PlacedPropItem({ prop, isSelected }) {
   const animSegmentIdx = useRef(0);
 
   const startDancerAnimation = useCallback(() => {
-    const dancerPaths = savedPaths.filter((p) => p.dancerId === prop.id).sort((a, b) => a.startTime - b.startTime);
+    const paths = useStageStore.getState().savedPaths;
+    const markers = useStageStore.getState().stationaryMarkers;
+    const dancerPaths = paths.filter((p) => p.dancerId === prop.id).sort((a, b) => a.startTime - b.startTime);
     if (dancerPaths.length === 0) return;
-    animSegments.current = dancerPaths.map((path) => ({ path, progress: 0 }));
+    const segments = [];
+    let prevEnd = 0;
+    dancerPaths.forEach((path) => {
+      // Insert holds that fall between the previous end and this path's start
+      const pathStart = path.startTime;
+      markers
+        .filter((m) => m.time >= prevEnd && m.time + m.duration <= pathStart)
+        .sort((a, b) => a.time - b.time)
+        .forEach((m) => {
+          if (m.time > prevEnd) {
+            segments.push({ kind: 'wait', duration: m.time - prevEnd });
+            prevEnd = m.time;
+          }
+          segments.push({ kind: 'wait', duration: m.duration });
+          prevEnd += m.duration;
+        });
+      if (pathStart > prevEnd) {
+        segments.push({ kind: 'wait', duration: pathStart - prevEnd });
+      }
+      segments.push({ kind: 'path', path, progress: 0, duration: path.duration });
+      prevEnd = Math.max(path.endTime || pathStart + path.duration, pathStart + path.duration);
+    });
+    animSegments.current = segments;
     animSegmentIdx.current = 0;
     animating.current = true;
-  }, [savedPaths, prop.id]);
+  }, [prop.id]);
 
   const startDancerAnimationRef = useRef(startDancerAnimation);
   startDancerAnimationRef.current = startDancerAnimation;
@@ -215,11 +235,33 @@ function PlacedPropItem({ prop, isSelected }) {
     if (!animating.current || isPaused) return;
     const segments = animSegments.current;
     const idx = animSegmentIdx.current;
-    if (idx >= segments.length) { animating.current = false; return; }
+    if (idx >= segments.length) { animating.current = false; useStageStore.getState().setPlaybackTime(0); return; }
     const seg = segments[idx];
-    seg.progress += delta / seg.path.duration;
+    // Compute current playback time: sum of completed segment durations + current progress
+    let currentTime = 0;
+    for (let i = 0; i < idx; i++) currentTime += segments[i].duration;
+    if (seg.kind === 'wait') {
+      seg.progress = (seg.progress || 0) + delta / seg.duration;
+      currentTime += (seg.progress || 0) * seg.duration;
+      if (seg.progress >= 1) { animSegmentIdx.current = idx + 1; }
+      if (!seg._lastPbReport || Math.abs(currentTime - seg._lastPbReport) > 0.1) {
+        seg._lastPbReport = currentTime;
+        useStageStore.getState().setPlaybackTime(currentTime);
+      }
+      return;
+    }
+    const path = seg.path;
+    seg.progress += delta / path.duration;
     if (seg.progress >= 1) { seg.progress = 1; animSegmentIdx.current = idx + 1; }
-    const pts = seg.path.points;
+    // Report playback time (throttled to ~10fps to avoid store spam)
+    let ct = 0;
+    for (let i = 0; i < idx; i++) ct += segments[i].duration;
+    ct += seg.progress * path.duration;
+    if (!seg._lastPbReport || Math.abs(ct - seg._lastPbReport) > 0.1) {
+      seg._lastPbReport = ct;
+      useStageStore.getState().setPlaybackTime(ct);
+    }
+    const pts = path.points;
     let total = 0;
     for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][2] - pts[i - 1][2]);
     const dist = seg.progress * total;
@@ -286,6 +328,10 @@ function PlacedPropItem({ prop, isSelected }) {
         dancerDragging.current = true;
         setOrbitEnabled(false);
         gl.domElement.style.cursor = 'grabbing';
+        // Save pre-drag position for redo
+        preDragPosition.current = [...propRef.current.position];
+        lastMoveTime.current = Date.now();
+        pathStraightened.current = false;
         // Start path recording
         const startPt = [propRef.current.position[0], topY + 0.02, propRef.current.position[2]];
         lastPathPoint.current = startPt;
@@ -294,11 +340,29 @@ function PlacedPropItem({ prop, isSelected }) {
       if (!dancerDragging.current) return;
       const pos = projectPointerToStage(event);
       if (pos) {
+        let newX = pos[0] + dancerDragOffset.current.x;
+        let newZ = pos[1] + dancerDragOffset.current.z;
+
+        // Magnetic guides toward cheer mat lines/centers (hold Shift to bypass)
+        if (stageTexture === 'cheer_mats' && !event.shiftKey) {
+          const stageW = halfX * 2;
+          const matW = stageW / 9;
+          const targets = [];
+          for (let i = 0; i <= 9; i++) targets.push(-halfX + i * matW);
+          for (let i = 0; i < 9; i++) targets.push(-halfX + (i + 0.5) * matW);
+          const maxPull = matW * 0.35;
+          for (const t of targets) {
+            const d = Math.abs(newX - t);
+            if (d < maxPull) {
+              // Smooth magnetic pull: stronger when closer, fades to 0 at maxPull
+              const strength = Math.pow(1 - d / maxPull, 2);
+              newX = newX + (t - newX) * strength;
+            }
+          }
+        }
+
         const newPosition = normalizePropPosition(
-          pos[0] + dancerDragOffset.current.x,
-          topY,
-          pos[1] + dancerDragOffset.current.z,
-          halfX, halfZ, false, topY, propRef.current,
+          newX, topY, newZ, halfX, halfZ, false, topY, propRef.current,
         );
         updateProp(prop.id, { position: newPosition });
 
@@ -307,18 +371,22 @@ function PlacedPropItem({ prop, isSelected }) {
         const point = [newPosition[0], topY + 0.02, newPosition[2]];
         if (!lastPathPoint.current || Math.hypot(point[0] - lastPathPoint.current[0], point[2] - lastPathPoint.current[2]) > 0.1) {
           lastPathPoint.current = point;
-          setDancerPath((prev) => [...prev, point]);
+          lastMoveTime.current = Date.now();
+          if (pathStraightened.current && dancerPathRef.current.length === 2) {
+            // Update the endpoint of the straight line
+            setDancerPath([dancerPathRef.current[0], point]);
+          } else {
+            pathStraightened.current = false;
+            setDancerPath((prev) => [...prev, point]);
+          }
+        } else if (!pathStraightened.current && lastMoveTime.current > 0 && Date.now() - lastMoveTime.current > 300 && dancerPathRef.current.length > 1) {
+          pathStraightened.current = true;
+          setDancerPath([dancerPathRef.current[0], point]);
         }
       }
     };
 
     const onUp = () => {
-      if (dancerDragging.current && choreographyOpenRef.current && dancerPathRef.current.length > 1) {
-        const dur = dancerTravelTimes[prop.id] ?? 5;
-        const myPaths = savedPathsRef.current.filter((p) => p.dancerId === prop.id);
-        const lastEnd = myPaths.length > 0 ? Math.max(...myPaths.map((p) => p.startTime + p.duration)) : 0;
-        savePath(prop.id, dancerPathRef.current, lastEnd, dur);
-      }
       dancerDragging.current = false;
       dragStartPos.current = null;
       setOrbitEnabled(true);
@@ -359,11 +427,25 @@ function PlacedPropItem({ prop, isSelected }) {
               : undefined
           }
         />
-        <PropTagLabel tag={prop.tag} />
-        {isSelected && showInScene && <PropCoordinateLabel prop={prop} />}
+        {isDancer && (
+          <mesh visible={false} position={[0, 0.85, 0]}>
+            <sphereGeometry args={[1.0, 16, 16]} />
+          </mesh>
+        )}
+        {!isDancer && <PropTagLabel tag={prop.tag} />}
+        {isSelected && showInScene && !isDancer && <PropCoordinateLabel prop={prop} />}
       </group>
       {isDancer && dancerHovered && prop.tag && (
-        <Html position={[prop.position[0], prop.position[1] + 1.9, prop.position[2]]} center>
+        <Html position={(() => {
+          const isTopView = camera.position.y > Math.abs(camera.position.x) && camera.position.y > Math.abs(camera.position.z);
+          if (isTopView) {
+            const dx = camera.position.x - prop.position[0];
+            const dz = camera.position.z - prop.position[2];
+            const dist = Math.hypot(dx, dz) || 1;
+            return [prop.position[0] + (dx / dist) * 0.6, prop.position[1] + 0.9, prop.position[2] + (dz / dist) * 0.6];
+          }
+          return [prop.position[0], prop.position[1] + 1.9, prop.position[2]];
+        })()} center>
           <div style={{ background: 'rgba(0,0,0,0.75)', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
             {prop.tag}
           </div>
@@ -388,18 +470,47 @@ function PlacedPropItem({ prop, isSelected }) {
         />
       ))}
       {isDancer && choreographyOpen && dancerPath.length > 1 && (
-        <Line
-          points={dancerPath}
-          color="#ef4444"
-          lineWidth={6}
-          transparent
-          opacity={0.8}
-          depthTest
-        />
+        <>
+          <Line points={dancerPath} color="#ef4444" lineWidth={6} transparent opacity={0.8} depthTest />
+          <mesh
+            position={[dancerPath[0][0], dancerPath[0][1] + 0.15, dancerPath[0][2]]}
+            onClick={(e) => {
+              e.stopPropagation();
+              const dur = dancerTravelTimes[prop.id] ?? 5;
+              const holdsEnd = Math.max(0, ...stationaryMarkers.map((m) => m.time + m.duration));
+              const myPaths = savedPathsRef.current.filter((p) => p.dancerId === prop.id);
+              const prevPathEnd = myPaths.length > 0
+                ? Math.max(...myPaths.map((p) => p.endTime || p.startTime + p.duration))
+                : 0;
+              // Start after whichever is later: previous path or holds
+              const startT = Math.max(prevPathEnd, holdsEnd);
+              savePath(prop.id, dancerPathRef.current, startT, dur);
+              setDancerPath([]);
+            }}
+            renderOrder={20}
+          >
+            <cylinderGeometry args={[0.12, 0.12, 0.06, 8]} />
+            <meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.5} />
+          </mesh>
+          <mesh
+            position={[dancerPath[0][0] + 0.3, dancerPath[0][1] + 0.15, dancerPath[0][2]]}
+            onClick={(e) => {
+              e.stopPropagation();
+              setDancerPath([]);
+              if (preDragPosition.current) {
+                updateProp(prop.id, { position: preDragPosition.current });
+              }
+            }}
+            renderOrder={20}
+          >
+            <cylinderGeometry args={[0.12, 0.12, 0.06, 8]} />
+            <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.5} />
+          </mesh>
+        </>
       )}
       {isDancer && choreographyOpen && visiblePaths.length > 0 && !animating.current && (
         <mesh
-          position={[visiblePaths[0].points[0][0], visiblePaths[0].points[0][1] + 0.15, visiblePaths[0].points[0][2]]}
+          position={[visiblePaths[0].points[0][0], visiblePaths[0].points[0][1] + 0.2, visiblePaths[0].points[0][2]]}
           onClick={(e) => { e.stopPropagation(); startDancerAnimation(); }}
           renderOrder={20}
         >
@@ -422,8 +533,8 @@ function PlacedPropItem({ prop, isSelected }) {
       {isSelected && !prop.visible && (
         <group position={prop.position} rotation={[0, prop.rotation, 0]}>
           <HiddenPropMarker scale={prop.scale} color={prop.color} />
-          <PropTagLabel tag={prop.tag} />
-          <PropCoordinateLabel prop={prop} />
+          {!isDancer && <PropTagLabel tag={prop.tag} />}
+          {!isDancer && <PropCoordinateLabel prop={prop} />}
         </group>
       )}
       {showPositioning && (

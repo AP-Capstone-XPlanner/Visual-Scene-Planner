@@ -42,6 +42,7 @@ export const useStageStore = create((set, get) => ({
   dancerCount: 0,
   playTriggeredIds: [],
   isPaused: false,
+  playbackTime: 0,
   props: [],
   selectedPropId: null,
   positioningMode: false,
@@ -103,6 +104,8 @@ export const useStageStore = create((set, get) => ({
 
   pausePlayback: () => set({ isPaused: true }),
   resumePlayback: () => set({ isPaused: false }),
+
+  setPlaybackTime: (time) => set({ playbackTime: time }),
 
   setShowStageBaseline: (show) => set({ showStageBaseline: show }),
 
@@ -479,6 +482,8 @@ export const useStageStore = create((set, get) => ({
   formationCounter: 0,
   savedPaths: [],
   pathCounter: 0,
+  stationaryMarkers: [],
+  stationaryCounter: 0,
   selectedFormationId: null,
   hiddenPathIds: [],
   timelineEndTime: 120, // seconds (default 2:00)
@@ -493,8 +498,10 @@ export const useStageStore = create((set, get) => ({
           savedPaths: [],
           formations: [],
           hiddenPathIds: [],
+          stationaryMarkers: [],
           formationCounter: 0,
           pathCounter: 0,
+          stationaryCounter: 0,
           selectedFormationId: null,
         };
       }
@@ -511,6 +518,7 @@ export const useStageStore = create((set, get) => ({
         points: points.map((p) => [...p]),
         startTime: Math.max(0, startTime ?? 0),
         duration: Math.max(0.5, duration ?? 5),
+        endTime: Math.max(0.5, (startTime ?? 0) + Math.max(0.5, duration ?? 5)),
       };
       const savedPaths = [...s.savedPaths, path].sort(
         (a, b) => a.startTime - b.startTime,
@@ -544,6 +552,45 @@ export const useStageStore = create((set, get) => ({
       savedPaths: s.savedPaths.filter((p) => p.id !== id),
     })),
 
+  addStationary: (time, duration) =>
+    set((s) => {
+      const newCount = s.stationaryCounter + 1;
+      const marker = {
+        id: crypto.randomUUID(),
+        name: `Hold ${newCount}`,
+        time: Math.max(0, time ?? 0),
+        duration: Math.max(0.5, duration ?? 5),
+      };
+      const markers = [...s.stationaryMarkers, marker].sort((a, b) => a.time - b.time);
+      return { stationaryMarkers: markers, stationaryCounter: newCount };
+    }),
+
+  updateStationaryTime: (id, time) =>
+    set((s) => ({
+      stationaryMarkers: s.stationaryMarkers
+        .map((m) => (m.id === id ? { ...m, time: Math.max(0, time) } : m))
+        .sort((a, b) => a.time - b.time),
+    })),
+
+  updateStationaryDuration: (id, duration) =>
+    set((s) => ({
+      stationaryMarkers: s.stationaryMarkers.map((m) =>
+        m.id === id ? { ...m, duration: Math.max(0.5, duration) } : m,
+      ),
+    })),
+
+  updateStationaryName: (id, name) =>
+    set((s) => ({
+      stationaryMarkers: s.stationaryMarkers.map((m) =>
+        m.id === id ? { ...m, name } : m,
+      ),
+    })),
+
+  removeStationary: (id) =>
+    set((s) => ({
+      stationaryMarkers: s.stationaryMarkers.filter((m) => m.id !== id),
+    })),
+
   setSelectedFormationId: (id) => set({ selectedFormationId: id }),
 
   togglePathVisibility: (pathId) =>
@@ -561,29 +608,22 @@ export const useStageStore = create((set, get) => ({
       return { hiddenPathIds: s.savedPaths.map((p) => p.id) };
     }),
 
-  saveFormation: (time) =>
+  saveFormation: (startTime, endTime) =>
     set((s) => {
       const dancers = s.props.filter((p) => p.type === 'dancer');
       if (dancers.length === 0) return s;
       const newCount = s.formationCounter + 1;
       const positions = {};
-      dancers.forEach((d) => {
-        positions[d.id] = [...d.position];
-      });
+      dancers.forEach((d) => { positions[d.id] = [...d.position]; });
       const formation = {
         id: crypto.randomUUID(),
         name: `Formation ${newCount}`,
-        time: Math.max(0, time ?? 0),
+        time: Math.max(0, startTime ?? 0),
+        endTime: Math.max(startTime + 0.5, endTime ?? startTime + 5),
         positions,
       };
-      // Insert in time order
-      const formations = [...s.formations, formation].sort(
-        (a, b) => a.time - b.time,
-      );
-      return {
-        formations,
-        formationCounter: newCount,
-      };
+      const formations = [...s.formations, formation].sort((a, b) => a.time - b.time);
+      return { formations, formationCounter: newCount };
     }),
 
   removeFormation: (id) =>
@@ -602,6 +642,13 @@ export const useStageStore = create((set, get) => ({
     set((s) => ({
       formations: s.formations.map((f) =>
         f.id === id ? { ...f, name } : f,
+      ),
+    })),
+
+  updateFormationEndTime: (id, endTime) =>
+    set((s) => ({
+      formations: s.formations.map((f) =>
+        f.id === id ? { ...f, endTime: Math.max(f.time + 0.5, endTime) } : f,
       ),
     })),
 

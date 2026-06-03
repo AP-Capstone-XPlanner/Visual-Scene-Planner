@@ -21,8 +21,6 @@ export function Sidebar() {
   const setGroundColor = useStageStore((s) => s.setGroundColor);
   const setStageTexture = useStageStore((s) => s.setStageTexture);
   const setCurtainDuration = useStageStore((s) => s.setCurtainDuration);
-  const dancerTravelTimes = useStageStore((s) => s.dancerTravelTimes);
-  const setDancerTravelTime = useStageStore((s) => s.setDancerTravelTime);
   const triggerDancerPlay = useStageStore((s) => s.triggerDancerPlay);
   const showStageBaseline = useStageStore((s) => s.showStageBaseline);
   const showStageAreaGrid = useStageStore((s) => s.showStageAreaGrid);
@@ -208,20 +206,13 @@ export function Sidebar() {
               Select All
             </label>
             {dancerProps.map((dancer) => (
-              <div key={dancer.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <label className="toggle stage-toggle" style={{ flex: 1, margin: 0 }}>
+              <div key={dancer.id} style={{ marginBottom: 4 }}>
+                <label className="toggle stage-toggle" style={{ margin: 0 }}>
                   <input type="checkbox"
                     checked={selectedDancerIds.includes(dancer.id)}
                     onChange={() => toggleDancerSelect(dancer.id)} />
                   {dancer.tag || 'Dancer'}
                 </label>
-                <DimensionControl
-                  slim
-                  label=""
-                  value={dancerTravelTimes[dancer.id] ?? 5}
-                  min={0.5} max={30} step={0.5} inputStep={0.1} unit="s"
-                  onChange={(v) => setDancerTravelTime(dancer.id, v)}
-                />
               </div>
             ))}
             <button type="button" className="btn primary"

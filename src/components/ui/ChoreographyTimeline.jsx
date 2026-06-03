@@ -18,6 +18,7 @@ export function ChoreographyTimeline() {
   const removeFormation = useStageStore((s) => s.removeFormation);
   const updateFormationTime = useStageStore((s) => s.updateFormationTime);
   const updateFormationName = useStageStore((s) => s.updateFormationName);
+  const updateFormationEndTime = useStageStore((s) => s.updateFormationEndTime);
   const setTimelineEndTime = useStageStore((s) => s.setTimelineEndTime);
   const setMusicDuration = useStageStore((s) => s.setMusicDuration);
   const triggerDancerPlay = useStageStore((s) => s.triggerDancerPlay);
@@ -25,15 +26,14 @@ export function ChoreographyTimeline() {
   const resumePlayback = useStageStore((s) => s.resumePlayback);
   const setTravelTimeBetweenFormations = useStageStore((s) => s.setTravelTimeBetweenFormations);
   const applyFormation = useStageStore((s) => s.applyFormation);
-  const savedPaths = useStageStore((s) => s.savedPaths);
-  const updatePathTime = useStageStore((s) => s.updatePathTime);
-  const updatePathDuration = useStageStore((s) => s.updatePathDuration);
-  const updatePathName = useStageStore((s) => s.updatePathName);
-  const removePath = useStageStore((s) => s.removePath);
   const setSelectedFormationId = useStageStore((s) => s.setSelectedFormationId);
-  const hiddenPathIds = useStageStore((s) => s.hiddenPathIds);
-  const togglePathVisibility = useStageStore((s) => s.togglePathVisibility);
-  const toggleAllPathsVisibility = useStageStore((s) => s.toggleAllPathsVisibility);
+  const stationaryMarkers = useStageStore((s) => s.stationaryMarkers);
+  const addStationary = useStageStore((s) => s.addStationary);
+  const updateStationaryTime = useStageStore((s) => s.updateStationaryTime);
+  const updateStationaryDuration = useStageStore((s) => s.updateStationaryDuration);
+  const updateStationaryName = useStageStore((s) => s.updateStationaryName);
+  const removeStationary = useStageStore((s) => s.removeStationary);
+  const playbackTime = useStageStore((s) => s.playbackTime);
   const props = useStageStore((s) => s.props);
 
   const fileInputRef = useRef(null);
@@ -41,6 +41,12 @@ export function ChoreographyTimeline() {
 
   const dancerIds = props.filter((p) => p.type === 'dancer').map((p) => p.id);
   const sortedFormations = [...formations].sort((a, b) => a.time - b.time);
+
+  // Combined timeline events (formations + stationary) for drawing lines
+  const timelineEvents = [
+    ...sortedFormations.map((f) => ({ ...f, kind: 'formation' })),
+    ...stationaryMarkers.map((m) => ({ ...m, kind: 'stationary' })),
+  ].sort((a, b) => a.time - b.time);
 
   const handleImportMusic = (e) => {
     const file = e.target.files?.[0];
@@ -54,12 +60,13 @@ export function ChoreographyTimeline() {
   };
 
   const handleSaveFormation = () => {
-    // First formation starts at 00:00; subsequent at +10s from last
-    const newTime = formations.length === 0 ? 0 : formations[formations.length - 1].time + 10;
-    saveFormation(newTime);
-    if (formations.length > 0) {
-      setTravelTimeBetweenFormations(formations[formations.length - 1].time, newTime);
-    }
+    const allEvents = [
+      ...formations.map((f) => ({ time: f.time, end: f.endTime || f.time + 5 })),
+      ...stationaryMarkers.map((m) => ({ time: m.time, end: m.time + m.duration })),
+    ];
+    const lastEnd = allEvents.length > 0 ? Math.max(...allEvents.map((e) => e.end)) : 0;
+    const startT = lastEnd;
+    saveFormation(startT, startT + 5);
   };
 
   const handleFormationTimeChange = (formationId, newTime) => {
@@ -136,30 +143,96 @@ export function ChoreographyTimeline() {
           <div className="choreography-timeline-bar">
             <div className="choreography-timeline-track">
               <span className="choreography-timeline-start">{formatTime(0)}</span>
-              {sortedFormations.map((f) => {
-                const pct = Math.min(100, (f.time / timelineEndTime) * 100);
+              {/* Connecting lines between consecutive events */}
+              {timelineEvents.map((evt, i) => {
+                if (i === timelineEvents.length - 1) return null;
+                const next = timelineEvents[i + 1];
+                const leftPct = Math.min(100, (evt.time / timelineEndTime) * 100);
+                const rightPct = Math.min(100, (next.time / timelineEndTime) * 100);
+                const isBetweenHold = evt.kind === 'stationary' && next.kind === 'stationary';
                 return (
-                  <div key={f.id} className="choreography-timeline-marker"
-                    style={{ left: `${pct}%` }}
-                    title={`${f.name} — ${formatTime(f.time)}`}
+                  <div key={`line-${evt.id}`}
+                    className={`choreography-timeline-line ${isBetweenHold ? 'choreography-timeline-line--hold' : ''}`}
+                    style={{ left: `${leftPct}%`, width: `${Math.max(0.5, rightPct - leftPct)}%` }}
+                    onClick={() => {
+                      if (evt.kind === 'formation') handleJumpToFormation(evt.id);
+                    }}
+                    title={evt.kind === 'formation' ? `${evt.name} → ${next.name}` : `${evt.name} (hold)`}
+                  />
+                );
+              })}
+              {/* Formation segments (orange bands) */}
+              {sortedFormations.map((f) => {
+                const leftPct = Math.min(100, (f.time / timelineEndTime) * 100);
+                const endT = f.endTime || f.time + 5;
+                const widthPct = Math.max(0.5, Math.min(100 - leftPct, ((endT - f.time) / timelineEndTime) * 100));
+                return (
+                  <div key={`form-seg-${f.id}`}
+                    className="choreography-timeline-form-segment"
+                    style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                    title={`${f.name}: ${formatTime(f.time)} – ${formatTime(endT)}`}
+                    onClick={() => handleJumpToFormation(f.id)}
+                  />
+                );
+              })}
+              {/* Hold segments (colored bands for hold duration) */}
+              {stationaryMarkers.map((m) => {
+                const leftPct = Math.min(100, (m.time / timelineEndTime) * 100);
+                const endTime = m.time + m.duration;
+                const widthPct = Math.min(100 - leftPct, (m.duration / timelineEndTime) * 100);
+                return (
+                  <div key={`hold-${m.id}`}
+                    className="choreography-timeline-hold-segment"
+                    style={{ left: `${leftPct}%`, width: `${Math.max(0.5, widthPct)}%` }}
+                    title={`${m.name}: ${formatTime(m.time)} – ${formatTime(endTime)}`}
+                  />
+                );
+              })}
+              {/* Formation dots (start + end) */}
+              {sortedFormations.flatMap((f) => {
+                const startPct = Math.min(100, (f.time / timelineEndTime) * 100);
+                const endT = f.endTime || f.time + 5;
+                const endPct = Math.min(100, (endT / timelineEndTime) * 100);
+                return [
+                  <div key={`fdot-${f.id}`} className="choreography-timeline-marker"
+                    style={{ left: `${startPct}%` }}
+                    title={`${f.name} start — ${formatTime(f.time)}`}
                     onClick={() => handleJumpToFormation(f.id)}>
                     <div className="choreography-timeline-marker-dot" />
+                  </div>,
+                  <div key={`fedot-${f.id}`} className="choreography-timeline-marker"
+                    style={{ left: `${endPct}%` }}
+                    title={`${f.name} end — ${formatTime(endT)}`}
+                    onClick={() => handleJumpToFormation(f.id)}>
+                    <div className="choreography-timeline-marker-dot choreography-timeline-marker-dot--end" />
+                  </div>,
+                ];
+              })}
+              {/* Stationary dots */}
+              {stationaryMarkers.map((m) => {
+                const pct = Math.min(100, (m.time / timelineEndTime) * 100);
+                const prevFormation = sortedFormations.filter((f) => f.time <= m.time).pop();
+                return (
+                  <div key={m.id} className="choreography-timeline-marker"
+                    style={{ left: `${pct}%` }}
+                    title={`${m.name} — ${formatTime(m.time)}`}
+                    onClick={() => {
+                      if (prevFormation) handleJumpToFormation(prevFormation.id);
+                      else if (sortedFormations.length > 0) handleJumpToFormation(sortedFormations[0].id);
+                    }}>
+                    <div className="choreography-timeline-marker-dot choreography-timeline-marker-dot--stationary" />
                   </div>
                 );
               })}
               <span className="choreography-timeline-end">{formatTime(timelineEndTime)}</span>
-              {/* Path segments as colored bands */}
-              {savedPaths.map((path) => {
-                const leftPct = Math.min(100, (path.startTime / timelineEndTime) * 100);
-                const widthPct = Math.min(100 - leftPct, (path.duration / timelineEndTime) * 100);
-                return (
-                  <div key={path.id}
-                    className="choreography-timeline-path-segment"
-                    style={{ left: `${leftPct}%`, width: `${Math.max(0.5, widthPct)}%` }}
-                    title={`${path.name} (${path.dancerId.slice(0, 4)}…) — ${formatTime(path.startTime)} +${path.duration}s`}
-                  />
-                );
-              })}
+              {/* Playback head */}
+              {playbackTime > 0 && (
+                <div className="choreography-timeline-playhead"
+                  style={{ left: `${Math.min(100, (playbackTime / timelineEndTime) * 100)}%` }}>
+                  <div className="choreography-timeline-playhead-line" />
+                  <span className="choreography-timeline-playhead-label">{formatTime(playbackTime)}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -172,12 +245,17 @@ export function ChoreographyTimeline() {
             {isPaused ? '▶' : '⏸'}
           </button>
           <button type="button" className="btn btn-compact secondary"
-            onClick={handleSaveFormation} title="Save Current Formation">💾</button>
+            onClick={() => {
+              const allEnds = [
+                ...formations.map((f) => f.endTime || f.time + 5),
+                ...stationaryMarkers.map((m) => m.time + m.duration),
+              ];
+              const startT = allEnds.length > 0 ? Math.max(0, ...allEnds) : 0;
+              addStationary(startT, 5);
+            }}
+            title="Add Stationary Hold">⏳ Hold</button>
           <button type="button" className="btn btn-compact secondary"
-            onClick={toggleAllPathsVisibility}
-            title={hiddenPathIds.length === savedPaths.length ? 'Show All Paths' : 'Hide All Paths'}>
-            {hiddenPathIds.length === savedPaths.length ? '👁' : '👁‍🗨'}
-          </button>
+            onClick={handleSaveFormation} title="Save Current Formation">💾</button>
           <button type="button" className="btn btn-compact secondary"
             onClick={() => fileInputRef.current?.click()} title="Import Music">🎵</button>
           <input ref={fileInputRef} type="file" accept="audio/*" style={{ display: 'none' }}
@@ -210,7 +288,10 @@ export function ChoreographyTimeline() {
             <input type="number" className="choreography-time-input choreography-time-input--xs"
               value={f.time} min={0} max={timelineEndTime} step={1}
               onChange={(e) => handleFormationTimeChange(f.id, Number(e.target.value))} />
-            <span className="choreography-time-unit">s</span>
+            <span className="choreography-time-unit">s –</span>
+            <input type="number" className="choreography-time-input choreography-time-input--xs"
+              value={f.endTime || f.time + 5} min={f.time + 0.5} max={timelineEndTime} step={1}
+              onChange={(e) => updateFormationEndTime(f.id, Number(e.target.value))} />
             <button type="button" className="btn btn-compact secondary choreography-btn--icon"
               onClick={() => handleJumpToFormation(f.id)} title="Jump">↺</button>
             <button type="button" className="btn btn-compact secondary choreography-btn--icon"
@@ -219,48 +300,33 @@ export function ChoreographyTimeline() {
         ))}
       </div>
 
-      {/* Paths list */}
+      {/* Stationary holds list */}
       <div className="choreography-formations">
-        {savedPaths.length === 0 && formations.length === 0 && (
-          <span className="choreography-empty">Draw a dancer path to create Path 1</span>
-        )}
-        {savedPaths.map((path) => {
-          const dancer = props.find((p) => p.id === path.dancerId);
-          return (
-            <div key={path.id} className="choreography-formation-row" style={{ background: 'rgba(239, 68, 68, 0.08)' }}>
-              {editingId === path.id ? (
-                <input type="text" className="choreography-name-input" value={path.name}
-                  maxLength={30} autoFocus
-                  onChange={(e) => updatePathName(path.id, e.target.value)}
-                  onBlur={() => setEditingFormationId(null)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') setEditingFormationId(null); }} />
-              ) : (
-                <span className="choreography-formation-name"
-                  onDoubleClick={() => setEditingId(path.id)}
-                  title={dancer?.tag || path.dancerId}>{path.name}</span>
-              )}
-              <span className="choreography-time-unit" style={{ fontSize: '0.62rem', color: '#a1a1aa' }}>
-                {dancer?.tag?.slice(0, 8) || path.dancerId.slice(0, 6)}
-              </span>
-              <input type="number" className="choreography-time-input choreography-time-input--xs"
-                value={path.startTime} min={0} max={timelineEndTime} step={1}
-                onChange={(e) => updatePathTime(path.id, Number(e.target.value))} />
-              <span className="choreography-time-unit">s</span>
-              <span style={{ fontSize: '0.6rem', color: '#71717a' }}>+</span>
-              <input type="number" className="choreography-time-input choreography-time-input--xs"
-                value={path.duration} min={0.5} max={timelineEndTime} step={0.5}
-                onChange={(e) => updatePathDuration(path.id, Number(e.target.value))} />
-              <span className="choreography-time-unit">s</span>
-              <button type="button" className="btn btn-compact secondary choreography-btn--icon"
-                onClick={() => togglePathVisibility(path.id)}
-                title={hiddenPathIds.includes(path.id) ? 'Show' : 'Hide'}>
-                {hiddenPathIds.includes(path.id) ? '👁' : '👁‍🗨'}
-              </button>
-              <button type="button" className="btn btn-compact secondary choreography-btn--icon"
-                onClick={() => removePath(path.id)} title="Remove">✕</button>
-            </div>
-          );
-        })}
+        {stationaryMarkers.map((m) => (
+          <div key={m.id} className="choreography-formation-row" style={{ background: 'rgba(99, 102, 241, 0.08)' }}>
+            {editingId === m.id ? (
+              <input type="text" className="choreography-name-input" value={m.name}
+                maxLength={30} autoFocus
+                onChange={(e) => updateStationaryName(m.id, e.target.value)}
+                onBlur={() => setEditingId(null)}
+                onKeyDown={(e) => { if (e.key === 'Enter') setEditingId(null); }} />
+            ) : (
+              <span className="choreography-formation-name"
+                onDoubleClick={() => setEditingId(m.id)}>{m.name}</span>
+            )}
+            <input type="number" className="choreography-time-input choreography-time-input--xs"
+              value={m.time} min={0} max={timelineEndTime} step={1}
+              onChange={(e) => updateStationaryTime(m.id, Number(e.target.value))} />
+            <span className="choreography-time-unit">s</span>
+            <span style={{ fontSize: '0.6rem', color: '#71717a' }}>for</span>
+            <input type="number" className="choreography-time-input choreography-time-input--xs"
+              value={m.duration} min={0.5} max={timelineEndTime} step={0.5}
+              onChange={(e) => updateStationaryDuration(m.id, Number(e.target.value))} />
+            <span className="choreography-time-unit">s</span>
+            <button type="button" className="btn btn-compact secondary choreography-btn--icon"
+              onClick={() => removeStationary(m.id)} title="Remove">✕</button>
+          </div>
+        ))}
       </div>
     </div>
   );

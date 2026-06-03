@@ -81,6 +81,28 @@ function drawMatteBlackPvc(ctx, size) {
   }
 }
 
+function drawCheerMats(ctx, size) {
+  const matCount = 9;
+  const matW = size / matCount;
+  const lineW = Math.max(2, size / 160);
+  for (let i = 0; i < matCount; i++) {
+    const x = i * matW;
+    ctx.fillStyle = '#3b6fb6';
+    ctx.fillRect(x, 0, matW, size);
+    for (let g = 0; g < 200; g++) {
+      const gx = x + seededNoise(g, i, 20) * matW;
+      const gy = seededNoise(g, i + 10, 21) * size;
+      ctx.fillStyle = `rgba(30, 50, 80, ${seededNoise(g, i + 20, 22) * 0.06})`;
+      ctx.fillRect(gx, gy, 2, 2);
+    }
+    // Black separator between mats (after each mat except the last)
+    if (i < matCount - 1) {
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(x + matW - lineW / 2, 0, lineW, size);
+    }
+  }
+}
+
 function generateDeckTexture(key, size = 512) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -96,6 +118,9 @@ function generateDeckTexture(key, size = 512) {
       break;
     case 'matte_black':
       drawMatteBlackPvc(ctx, size);
+      break;
+    case 'cheer_mats':
+      drawCheerMats(ctx, size);
       break;
     default:
       drawDarkWood(ctx, size);

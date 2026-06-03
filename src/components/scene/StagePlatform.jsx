@@ -18,8 +18,13 @@ export function StagePlatform() {
   const deckMap = useMemo(() => getStageDeckTexture(texture), [texture]);
 
   useLayoutEffect(() => {
-    applyStageDeckTextureRepeat(deckMap, width, length);
-  }, [deckMap, length, width]);
+    if (texture === 'cheer_mats') {
+      deckMap.repeat.set(1, 1);
+    } else {
+      applyStageDeckTextureRepeat(deckMap, width, length);
+    }
+    deckMap.needsUpdate = true;
+  }, [deckMap, length, width, texture]);
 
   return (
     <group>

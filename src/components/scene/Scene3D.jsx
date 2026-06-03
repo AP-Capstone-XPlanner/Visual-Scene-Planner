@@ -67,7 +67,7 @@ function SceneContent() {
         enableDamping
         dampingFactor={0.08}
         minPolarAngle={0.2}
-        maxPolarAngle={Math.PI / 2 - 0.08}
+        maxPolarAngle={Math.PI / 2 - 0.01}
         minDistance={5}
         maxDistance={maxExtent * 2}
         target={orbitTarget}
